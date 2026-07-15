@@ -124,6 +124,16 @@ declare namespace Api {
                 online_user_count: number;
                 history_max_online: number;
                 server_up_time: number;
+                deployment_mode: string;
+                run_mode: string;
+                version: string;
+                database_provider: string;
+                cache_provider: string;
+                search_provider: string;
+                storage_provider: string;
+                enabled_features: string[];
+                has_pending_restart: boolean;
+                active_settings_count: number;
             }
 
             interface SiteProfileResp {

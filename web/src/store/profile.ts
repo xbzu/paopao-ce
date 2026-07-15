@@ -11,7 +11,7 @@ export const useStoreProfile = defineStore("profile", () => {
         allowTweetAttachmentPrice: true,
         allowTweetVideo: true,
         allowUserRegister: true,
-        allowPhoneBind: true,
+        allowPhoneBind: false,
         defaultTweetMaxLength: 2000,
         tweetWebEllipsisSize: 400,
         tweetMobileEllipsisSize: 300,
@@ -21,7 +21,7 @@ export const useStoreProfile = defineStore("profile", () => {
         copyrightLeft: '',
         copyrightLeftLink: '',
         copyrightRight: 'Github',
-        copyrightRightLink: 'https://github.com/rocboss/paopao-ce',
+        copyrightRightLink: 'https://github.com/xbzu/paopao-ce',
     });
 
     function loadDefaultSiteProfile() {

@@ -8,6 +8,7 @@ import (
 	stdjson "encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 
@@ -192,7 +193,7 @@ type Definition struct {
 }
 
 var (
-	ReadonlyFields   = []string{"allow_user_register", "allow_phone_bind"}
+	ReadonlyFields   = []string{}
 	bootstrapConfig  *bootstrapSnapshot
 	visibilityOption = []Option{{Label: "Public", Value: "public"}, {Label: "Following", Value: "following"}, {Label: "Friend", Value: "friend"}, {Label: "Private", Value: "private"}}
 )
@@ -249,6 +250,7 @@ func ensureBootstrapSnapshot() {
 		bootstrapConfig.Alipay = confAlipaySnapshot{AppID: conf.AlipaySetting.AppID, PrivateKey: conf.AlipaySetting.PrivateKey, RootCertFile: conf.AlipaySetting.RootCertFile, PublicCertFile: conf.AlipaySetting.PublicCertFile, AppPublicCertFile: conf.AlipaySetting.AppPublicCertFile, InProduction: conf.AlipaySetting.InProduction}
 	}
 	if conf.WebProfileSetting != nil {
+		runtimePolicy := runtimePolicyFromBootstrap()
 		bootstrapConfig.WebProfile = confWebProfileSnapshot{
 			UseFriendship:             conf.WebProfileSetting.UseFriendship,
 			EnableTrendsBar:           conf.WebProfileSetting.EnableTrendsBar,
@@ -256,8 +258,8 @@ func ensureBootstrapSnapshot() {
 			AllowTweetAttachment:      conf.WebProfileSetting.AllowTweetAttachment,
 			AllowTweetAttachmentPrice: conf.WebProfileSetting.AllowTweetAttachmentPrice,
 			AllowTweetVideo:           conf.WebProfileSetting.AllowTweetVideo,
-			AllowUserRegister:         conf.WebProfileSetting.AllowUserRegister,
-			AllowPhoneBind:            conf.WebProfileSetting.AllowPhoneBind,
+			AllowUserRegister:         runtimePolicy.AllowUserRegister,
+			AllowPhoneBind:            runtimePolicy.AllowPhoneBind,
 			DefaultTweetMaxLength:     conf.WebProfileSetting.DefaultTweetMaxLength,
 			TweetWebEllipsisSize:      conf.WebProfileSetting.TweetWebEllipsisSize,
 			TweetMobileEllipsisSize:   conf.WebProfileSetting.TweetMobileEllipsisSize,
@@ -281,39 +283,39 @@ func CloneReadonlyFields() []string {
 func Registry() []Definition {
 	ensureBootstrapSnapshot()
 	return []Definition{
-		boolDef("web_profile.use_friendship", "web", "profile", "Use friendship", "Switch the frontend friendship model.", ApplyModeLive, false, true, func() any { return conf.WebProfileSetting.UseFriendship }, func() any { return bootstrapConfig.WebProfile.UseFriendship }, func(v any) { conf.WebProfileSetting.UseFriendship = v.(bool) }),
-		boolDef("web_profile.enable_trends_bar", "web", "profile", "Enable trends bar", "Show the trends sidebar in the web UI.", ApplyModeLive, false, true, func() any { return conf.WebProfileSetting.EnableTrendsBar }, func() any { return bootstrapConfig.WebProfile.EnableTrendsBar }, func(v any) { conf.WebProfileSetting.EnableTrendsBar = v.(bool) }),
-		boolDef("web_profile.enable_wallet", "web", "profile", "Enable wallet", "Enable wallet-related frontend features.", ApplyModeLive, false, true, func() any { return conf.WebProfileSetting.EnableWallet }, func() any { return bootstrapConfig.WebProfile.EnableWallet }, func(v any) { conf.WebProfileSetting.EnableWallet = v.(bool) }),
-		boolDef("web_profile.allow_tweet_attachment", "web", "profile", "Allow attachments", "Allow file attachments on posts.", ApplyModeLive, false, true, func() any { return conf.WebProfileSetting.AllowTweetAttachment }, func() any { return bootstrapConfig.WebProfile.AllowTweetAttachment }, func(v any) { conf.WebProfileSetting.AllowTweetAttachment = v.(bool) }),
-		boolDef("web_profile.allow_tweet_attachment_price", "web", "profile", "Allow paid attachments", "Allow post attachments to have a price.", ApplyModeLive, false, true, func() any { return conf.WebProfileSetting.AllowTweetAttachmentPrice }, func() any { return bootstrapConfig.WebProfile.AllowTweetAttachmentPrice }, func(v any) { conf.WebProfileSetting.AllowTweetAttachmentPrice = v.(bool) }),
-		boolDef("web_profile.allow_tweet_video", "web", "profile", "Allow video posts", "Allow video uploads on posts.", ApplyModeLive, false, true, func() any { return conf.WebProfileSetting.AllowTweetVideo }, func() any { return bootstrapConfig.WebProfile.AllowTweetVideo }, func(v any) { conf.WebProfileSetting.AllowTweetVideo = v.(bool) }),
-		boolDef("web_profile.allow_user_register", "web", "profile", "Allow user registration", "Bootstrap-only registration gate from YAML/features.", ApplyModeBootstrapOnly, false, false, func() any { return conf.WebProfileSetting.AllowUserRegister }, func() any { return bootstrapConfig.WebProfile.AllowUserRegister }, nil),
-		boolDef("web_profile.allow_phone_bind", "web", "profile", "Allow phone binding", "Bootstrap-only phone binding gate from YAML/features.", ApplyModeBootstrapOnly, false, false, func() any { return conf.WebProfileSetting.AllowPhoneBind }, func() any { return bootstrapConfig.WebProfile.AllowPhoneBind }, nil),
-		intDef("web_profile.default_tweet_max_length", "web", "profile", "Default tweet max length", "Maximum allowed tweet length.", ApplyModeLive, false, true, func() any { return conf.WebProfileSetting.DefaultTweetMaxLength }, func() any { return bootstrapConfig.WebProfile.DefaultTweetMaxLength }, func(v int) error { return between(v, 1, 2000, "default_tweet_max_length") }, func(v any) { conf.WebProfileSetting.DefaultTweetMaxLength = v.(int) }),
-		intDef("web_profile.tweet_web_ellipsis_size", "web", "profile", "Web ellipsis size", "Truncated feed length on web.", ApplyModeLive, false, true, func() any { return conf.WebProfileSetting.TweetWebEllipsisSize }, func() any { return bootstrapConfig.WebProfile.TweetWebEllipsisSize }, func(v int) error {
-			return between(v, 1, conf.WebProfileSetting.DefaultTweetMaxLength, "tweet_web_ellipsis_size")
+		boolDef("web_profile.use_friendship", "web", "profile", "Use friendship", "Switch the frontend friendship model.", ApplyModeRestartRequired, false, true, func() any { return conf.WebProfileSetting.UseFriendship }, func() any { return bootstrapConfig.WebProfile.UseFriendship }, func(v any) { conf.WebProfileSetting.UseFriendship = v.(bool) }),
+		boolDef("web_profile.enable_trends_bar", "web", "profile", "Enable trends bar", "Show the trends sidebar in the web UI.", ApplyModeRestartRequired, false, true, func() any { return conf.WebProfileSetting.EnableTrendsBar }, func() any { return bootstrapConfig.WebProfile.EnableTrendsBar }, func(v any) { conf.WebProfileSetting.EnableTrendsBar = v.(bool) }),
+		boolDef("web_profile.enable_wallet", "web", "profile", "Enable wallet", "Enable wallet-related frontend features.", ApplyModeRestartRequired, false, true, func() any { return conf.WebProfileSetting.EnableWallet }, func() any { return bootstrapConfig.WebProfile.EnableWallet }, func(v any) { conf.WebProfileSetting.EnableWallet = v.(bool) }),
+		boolDef("web_profile.allow_tweet_attachment", "web", "profile", "Allow attachments", "Allow file attachments on posts.", ApplyModeRestartRequired, false, true, func() any { return conf.WebProfileSetting.AllowTweetAttachment }, func() any { return bootstrapConfig.WebProfile.AllowTweetAttachment }, func(v any) { conf.WebProfileSetting.AllowTweetAttachment = v.(bool) }),
+		boolDef("web_profile.allow_tweet_attachment_price", "web", "profile", "Allow paid attachments", "Allow post attachments to have a price.", ApplyModeRestartRequired, false, true, func() any { return conf.WebProfileSetting.AllowTweetAttachmentPrice }, func() any { return bootstrapConfig.WebProfile.AllowTweetAttachmentPrice }, func(v any) { conf.WebProfileSetting.AllowTweetAttachmentPrice = v.(bool) }),
+		boolDef("web_profile.allow_tweet_video", "web", "profile", "Allow video posts", "Allow video uploads on posts.", ApplyModeRestartRequired, false, true, func() any { return conf.WebProfileSetting.AllowTweetVideo }, func() any { return bootstrapConfig.WebProfile.AllowTweetVideo }, func(v any) { conf.WebProfileSetting.AllowTweetVideo = v.(bool) }),
+		boolDef("web_profile.allow_user_register", "web", "profile", "Allow user registration", "Allow new users to register.", ApplyModeLive, false, true, func() any { return CurrentRuntimePolicy().AllowUserRegister }, func() any { return bootstrapConfig.WebProfile.AllowUserRegister }, func(v any) { setAllowUserRegister(v.(bool)) }),
+		boolDefWithActive("web_profile.allow_phone_bind", "web", "profile", "Allow phone binding", "Allow verified phone binding. Requires the Sms feature and a working SMS provider.", ApplyModeLive, false, true, func() bool { return cfg.If("Sms") }, func() any { return CurrentRuntimePolicy().AllowPhoneBind }, func() any { return bootstrapConfig.WebProfile.AllowPhoneBind }, func(v any) { setAllowPhoneBind(v.(bool)) }),
+		intDef("web_profile.default_tweet_max_length", "web", "profile", "Default tweet max length", "Maximum allowed tweet length.", ApplyModeRestartRequired, false, true, func() any { return conf.WebProfileSetting.DefaultTweetMaxLength }, func() any { return bootstrapConfig.WebProfile.DefaultTweetMaxLength }, func(v int) error { return between(v, 1, 2000, "default_tweet_max_length") }, func(v any) { conf.WebProfileSetting.DefaultTweetMaxLength = v.(int) }),
+		intDef("web_profile.tweet_web_ellipsis_size", "web", "profile", "Web ellipsis size", "Truncated feed length on web.", ApplyModeRestartRequired, false, true, func() any { return conf.WebProfileSetting.TweetWebEllipsisSize }, func() any { return bootstrapConfig.WebProfile.TweetWebEllipsisSize }, func(v int) error {
+			return between(v, 1, 2000, "tweet_web_ellipsis_size")
 		}, func(v any) { conf.WebProfileSetting.TweetWebEllipsisSize = v.(int) }),
-		intDef("web_profile.tweet_mobile_ellipsis_size", "web", "profile", "Mobile ellipsis size", "Truncated feed length on mobile.", ApplyModeLive, false, true, func() any { return conf.WebProfileSetting.TweetMobileEllipsisSize }, func() any { return bootstrapConfig.WebProfile.TweetMobileEllipsisSize }, func(v int) error {
-			return between(v, 1, conf.WebProfileSetting.DefaultTweetMaxLength, "tweet_mobile_ellipsis_size")
+		intDef("web_profile.tweet_mobile_ellipsis_size", "web", "profile", "Mobile ellipsis size", "Truncated feed length on mobile.", ApplyModeRestartRequired, false, true, func() any { return conf.WebProfileSetting.TweetMobileEllipsisSize }, func() any { return bootstrapConfig.WebProfile.TweetMobileEllipsisSize }, func(v int) error {
+			return between(v, 1, 2000, "tweet_mobile_ellipsis_size")
 		}, func(v any) { conf.WebProfileSetting.TweetMobileEllipsisSize = v.(int) }),
-		stringDef("web_profile.default_tweet_visibility", "web", "profile", "Default tweet visibility", "Default visibility for new posts.", ApplyModeLive, false, true, visibilityOption, func() any { return conf.WebProfileSetting.DefaultTweetVisibility }, func() any { return bootstrapConfig.WebProfile.DefaultTweetVisibility }, validateVisibility, func(v any) { conf.WebProfileSetting.DefaultTweetVisibility = v.(string) }),
-		intDef("web_profile.default_msg_loop_interval", "web", "profile", "Message polling interval", "Polling interval for unread messages in milliseconds.", ApplyModeLive, false, true, func() any { return conf.WebProfileSetting.DefaultMsgLoopInterval }, func() any { return bootstrapConfig.WebProfile.DefaultMsgLoopInterval }, func(v int) error { return between(v, 1000, 60000, "default_msg_loop_interval") }, func(v any) { conf.WebProfileSetting.DefaultMsgLoopInterval = v.(int) }),
-		stringDef("web_profile.copyright_top", "web", "profile", "Copyright top", "Top copyright line displayed in the UI.", ApplyModeLive, false, true, nil, func() any { return conf.WebProfileSetting.CopyrightTop }, func() any { return bootstrapConfig.WebProfile.CopyrightTop }, validateRequiredTrimmed("copyright_top", 255), func(v any) { conf.WebProfileSetting.CopyrightTop = v.(string) }),
-		stringDef("web_profile.copyright_left", "web", "profile", "Copyright left", "Left footer label.", ApplyModeLive, false, true, nil, func() any { return conf.WebProfileSetting.CopyrightLeft }, func() any { return bootstrapConfig.WebProfile.CopyrightLeft }, validateRequiredTrimmed("copyright_left", 255), func(v any) { conf.WebProfileSetting.CopyrightLeft = v.(string) }),
-		stringDef("web_profile.copyright_left_link", "web", "profile", "Copyright left link", "Optional left footer link.", ApplyModeLive, false, true, nil, func() any { return conf.WebProfileSetting.CopyrightLeftLink }, func() any { return bootstrapConfig.WebProfile.CopyrightLeftLink }, validateOptionalURL("copyright_left_link", 255), func(v any) { conf.WebProfileSetting.CopyrightLeftLink = v.(string) }),
-		stringDef("web_profile.copyright_right", "web", "profile", "Copyright right", "Right footer label.", ApplyModeLive, false, true, nil, func() any { return conf.WebProfileSetting.CopyrightRight }, func() any { return bootstrapConfig.WebProfile.CopyrightRight }, validateRequiredTrimmed("copyright_right", 255), func(v any) { conf.WebProfileSetting.CopyrightRight = v.(string) }),
-		stringDef("web_profile.copyright_right_link", "web", "profile", "Copyright right link", "Optional right footer link.", ApplyModeLive, false, true, nil, func() any { return conf.WebProfileSetting.CopyrightRightLink }, func() any { return bootstrapConfig.WebProfile.CopyrightRightLink }, validateOptionalURL("copyright_right_link", 255), func(v any) { conf.WebProfileSetting.CopyrightRightLink = v.(string) }),
+		stringDef("web_profile.default_tweet_visibility", "web", "profile", "Default tweet visibility", "Default visibility for new posts.", ApplyModeRestartRequired, false, true, visibilityOption, func() any { return conf.WebProfileSetting.DefaultTweetVisibility }, func() any { return bootstrapConfig.WebProfile.DefaultTweetVisibility }, validateVisibility, func(v any) { conf.WebProfileSetting.DefaultTweetVisibility = v.(string) }),
+		intDef("web_profile.default_msg_loop_interval", "web", "profile", "Message polling interval", "Polling interval for unread messages in milliseconds.", ApplyModeRestartRequired, false, true, func() any { return conf.WebProfileSetting.DefaultMsgLoopInterval }, func() any { return bootstrapConfig.WebProfile.DefaultMsgLoopInterval }, func(v int) error { return between(v, 1000, 60000, "default_msg_loop_interval") }, func(v any) { conf.WebProfileSetting.DefaultMsgLoopInterval = v.(int) }),
+		stringDef("web_profile.copyright_top", "web", "profile", "Copyright top", "Top copyright line displayed in the UI.", ApplyModeRestartRequired, false, true, nil, func() any { return conf.WebProfileSetting.CopyrightTop }, func() any { return bootstrapConfig.WebProfile.CopyrightTop }, validateRequiredTrimmed("copyright_top", 255), func(v any) { conf.WebProfileSetting.CopyrightTop = v.(string) }),
+		stringDef("web_profile.copyright_left", "web", "profile", "Copyright left", "Left footer label.", ApplyModeRestartRequired, false, true, nil, func() any { return conf.WebProfileSetting.CopyrightLeft }, func() any { return bootstrapConfig.WebProfile.CopyrightLeft }, validateRequiredTrimmed("copyright_left", 255), func(v any) { conf.WebProfileSetting.CopyrightLeft = v.(string) }),
+		stringDef("web_profile.copyright_left_link", "web", "profile", "Copyright left link", "Optional left footer link.", ApplyModeRestartRequired, false, true, nil, func() any { return conf.WebProfileSetting.CopyrightLeftLink }, func() any { return bootstrapConfig.WebProfile.CopyrightLeftLink }, validateOptionalURL("copyright_left_link", 255), func(v any) { conf.WebProfileSetting.CopyrightLeftLink = v.(string) }),
+		stringDef("web_profile.copyright_right", "web", "profile", "Copyright right", "Right footer label.", ApplyModeRestartRequired, false, true, nil, func() any { return conf.WebProfileSetting.CopyrightRight }, func() any { return bootstrapConfig.WebProfile.CopyrightRight }, validateRequiredTrimmed("copyright_right", 255), func(v any) { conf.WebProfileSetting.CopyrightRight = v.(string) }),
+		stringDef("web_profile.copyright_right_link", "web", "profile", "Copyright right link", "Optional right footer link.", ApplyModeRestartRequired, false, true, nil, func() any { return conf.WebProfileSetting.CopyrightRightLink }, func() any { return bootstrapConfig.WebProfile.CopyrightRightLink }, validateOptionalURL("copyright_right_link", 255), func(v any) { conf.WebProfileSetting.CopyrightRightLink = v.(string) }),
 
-		int64Def("app.max_comment_count", "app", "general", "Max comment count", "Maximum comments allowed on a post.", ApplyModeLive, func() any { return conf.AppSetting.MaxCommentCount }, func() any { return bootstrapConfig.App.MaxCommentCount }, func(v int64) error { return betweenInt64(v, 1, 100000, "max_comment_count") }, func(v any) { conf.AppSetting.MaxCommentCount = v.(int64) }),
-		floatDef("app.attachment_income_rate", "app", "general", "Attachment income rate", "Revenue share for paid attachments.", ApplyModeLive, func() any { return conf.AppSetting.AttachmentIncomeRate }, func() any { return bootstrapConfig.App.AttachmentIncomeRate }, func(v float64) error {
+		int64Def("app.max_comment_count", "app", "general", "Max comment count", "Maximum comments allowed on a post.", ApplyModeRestartRequired, func() any { return conf.AppSetting.MaxCommentCount }, func() any { return bootstrapConfig.App.MaxCommentCount }, func(v int64) error { return betweenInt64(v, 1, 100000, "max_comment_count") }, func(v any) { conf.AppSetting.MaxCommentCount = v.(int64) }),
+		floatDef("app.attachment_income_rate", "app", "general", "Attachment income rate", "Revenue share for paid attachments.", ApplyModeRestartRequired, func() any { return conf.AppSetting.AttachmentIncomeRate }, func() any { return bootstrapConfig.App.AttachmentIncomeRate }, func(v float64) error {
 			if v < 0 || v > 1 {
 				return xerror.InvalidParams.WithDetails("attachment_income_rate must be between 0 and 1")
 			}
 			return nil
 		}, func(v any) { conf.AppSetting.AttachmentIncomeRate = v.(float64) }),
-		intDef("app.default_page_size", "app", "general", "Default page size", "Default pagination size.", ApplyModeLive, false, true, func() any { return conf.AppSetting.DefaultPageSize }, func() any { return bootstrapConfig.App.DefaultPageSize }, func(v int) error { return between(v, 1, conf.AppSetting.MaxPageSize, "default_page_size") }, func(v any) { conf.AppSetting.DefaultPageSize = v.(int) }),
-		intDef("app.max_page_size", "app", "general", "Max page size", "Maximum pagination size.", ApplyModeLive, false, true, func() any { return conf.AppSetting.MaxPageSize }, func() any { return bootstrapConfig.App.MaxPageSize }, func(v int) error {
-			return between(v, maxInt(conf.AppSetting.DefaultPageSize, 1), 1000, "max_page_size")
+		intDef("app.default_page_size", "app", "general", "Default page size", "Default pagination size.", ApplyModeRestartRequired, false, true, func() any { return conf.AppSetting.DefaultPageSize }, func() any { return bootstrapConfig.App.DefaultPageSize }, func(v int) error { return between(v, 1, 1000, "default_page_size") }, func(v any) { conf.AppSetting.DefaultPageSize = v.(int) }),
+		intDef("app.max_page_size", "app", "general", "Max page size", "Maximum pagination size.", ApplyModeRestartRequired, false, true, func() any { return conf.AppSetting.MaxPageSize }, func() any { return bootstrapConfig.App.MaxPageSize }, func(v int) error {
+			return between(v, 1, 1000, "max_page_size")
 		}, func(v any) { conf.AppSetting.MaxPageSize = v.(int) }),
 		int64Def("app.max_whisper_daily", "app", "limits", "Max daily whispers", "Daily whisper send limit. Restart required because servants cache it at startup.", ApplyModeRestartRequired, func() any { return conf.AppSetting.MaxWhisperDaily }, func() any { return bootstrapConfig.App.MaxWhisperDaily }, func(v int64) error { return betweenInt64(v, 1, 1000000, "max_whisper_daily") }, func(v any) { conf.AppSetting.MaxWhisperDaily = v.(int64) }),
 		intDef("app.max_captcha_times", "app", "limits", "Max captcha times", "Max captcha request count cached at startup by web servants.", ApplyModeRestartRequired, false, true, func() any { return conf.AppSetting.MaxCaptchaTimes }, func() any { return bootstrapConfig.App.MaxCaptchaTimes }, func(v int) error { return between(v, 1, 1000, "max_captcha_times") }, func(v any) { conf.AppSetting.MaxCaptchaTimes = v.(int) }),
@@ -323,7 +325,7 @@ func Registry() []Definition {
 
 		stringDefWithActive("meili.host", "search", "meili", "Meili host", "Meilisearch host.", ApplyModeRestartRequired, false, true, nil, func() bool { return cfg.If("Meili") }, func() any { return conf.MeiliSetting.Host }, func() any { return bootstrapConfig.Meili.Host }, validateTrimmedMax("meili.host", 255), func(v any) { conf.MeiliSetting.Host = v.(string) }),
 		stringDefWithActive("meili.index", "search", "meili", "Meili index", "Meilisearch index name.", ApplyModeRestartRequired, false, true, nil, func() bool { return cfg.If("Meili") }, func() any { return conf.MeiliSetting.Index }, func() any { return bootstrapConfig.Meili.Index }, validateTrimmedMax("meili.index", 255), func(v any) { conf.MeiliSetting.Index = v.(string) }),
-		stringDefWithActive("meili.api_key", "search", "meili", "Meili API key", "Meilisearch API key.", ApplyModeRestartRequired, true, true, nil, func() bool { return cfg.If("Meili") }, func() any { return conf.MeiliSetting.ApiKey }, func() any { return bootstrapConfig.Meili.ApiKey }, validateTrimmedMax("meili.api_key", 512), func(v any) { conf.MeiliSetting.ApiKey = v.(string) }),
+		meiliAPIKeyDefinition(),
 		boolDefWithActive("meili.secure", "search", "meili", "Meili secure", "Use HTTPS for Meilisearch.", ApplyModeRestartRequired, false, true, func() bool { return cfg.If("Meili") }, func() any { return conf.MeiliSetting.Secure }, func() any { return bootstrapConfig.Meili.Secure }, func(v any) { conf.MeiliSetting.Secure = v.(bool) }),
 
 		stringDefWithActive("zinc.host", "search", "zinc", "Zinc host", "Zinc host.", ApplyModeRestartRequired, false, true, nil, func() bool { return cfg.If("Zinc") }, func() any { return conf.ZincSetting.Host }, func() any { return bootstrapConfig.Zinc.Host }, validateTrimmedMax("zinc.host", 255), func(v any) { conf.ZincSetting.Host = v.(string) }),
@@ -336,9 +338,9 @@ func Registry() []Definition {
 		stringDef("object_storage.temp_dir", "storage", "common", "Object temp dir", "Temporary directory/prefix for objects.", ApplyModeRestartRequired, false, true, nil, func() any { return conf.ObjectStorage.TempDir }, func() any { return bootstrapConfig.ObjectStorage.TempDir }, validateTrimmedMax("temp_dir", 255), func(v any) { conf.ObjectStorage.TempDir = v.(string) }),
 
 		stringDefWithActive("local_oss.save_path", "storage", "local_oss", "Local OSS save path", "Filesystem path for local object storage.", ApplyModeRestartRequired, false, true, nil, func() bool { return cfg.If("LocalOSS") }, func() any { return conf.LocalOSSSetting.SavePath }, func() any { return bootstrapConfig.LocalOSS.SavePath }, validateTrimmedMax("local_oss.save_path", 1024), func(v any) { conf.LocalOSSSetting.SavePath = v.(string) }),
-		boolDefWithActive("local_oss.secure", "storage", "local_oss", "Local OSS secure", "Generate HTTPS URLs for local object storage.", ApplyModeRestartRequired, false, true, func() bool { return cfg.If("LocalOSS") }, func() any { return conf.LocalOSSSetting.Secure }, func() any { return bootstrapConfig.LocalOSS.Secure }, func(v any) { conf.LocalOSSSetting.Secure = v.(bool) }),
+		localOSSSecureDefinition(),
 		stringDefWithActive("local_oss.bucket", "storage", "local_oss", "Local OSS bucket", "Bucket folder name for local storage.", ApplyModeRestartRequired, false, true, nil, func() bool { return cfg.If("LocalOSS") }, func() any { return conf.LocalOSSSetting.Bucket }, func() any { return bootstrapConfig.LocalOSS.Bucket }, validateTrimmedMax("local_oss.bucket", 255), func(v any) { conf.LocalOSSSetting.Bucket = v.(string) }),
-		stringDefWithActive("local_oss.domain", "storage", "local_oss", "Local OSS domain", "Public domain for local object storage.", ApplyModeRestartRequired, false, true, nil, func() bool { return cfg.If("LocalOSS") }, func() any { return conf.LocalOSSSetting.Domain }, func() any { return bootstrapConfig.LocalOSS.Domain }, validateTrimmedMax("local_oss.domain", 255), func(v any) { conf.LocalOSSSetting.Domain = v.(string) }),
+		localOSSDomainDefinition(),
 
 		stringDefWithActive("minio.access_key", "storage", "minio", "MinIO access key", "MinIO access key.", ApplyModeRestartRequired, false, true, nil, func() bool { return cfg.If("MinIO") }, func() any { return conf.MinIOSetting.AccessKey }, func() any { return bootstrapConfig.MinIO.AccessKey }, validateTrimmedMax("minio.access_key", 255), func(v any) { conf.MinIOSetting.AccessKey = v.(string) }),
 		stringDefWithActive("minio.secret_key", "storage", "minio", "MinIO secret key", "MinIO secret key.", ApplyModeRestartRequired, true, true, nil, func() bool { return cfg.If("MinIO") }, func() any { return conf.MinIOSetting.SecretKey }, func() any { return bootstrapConfig.MinIO.SecretKey }, validateTrimmedMax("minio.secret_key", 512), func(v any) { conf.MinIOSetting.SecretKey = v.(string) }),
@@ -384,6 +386,127 @@ func Registry() []Definition {
 		stringDefWithActive("alipay.app_public_cert_file", "payments", "alipay", "Alipay app public cert file", "Path to the app public certificate file.", ApplyModeRestartRequired, false, true, nil, func() bool { return cfg.If("Alipay") }, func() any { return conf.AlipaySetting.AppPublicCertFile }, func() any { return bootstrapConfig.Alipay.AppPublicCertFile }, validateTrimmedMax("alipay.app_public_cert_file", 1024), func(v any) { conf.AlipaySetting.AppPublicCertFile = v.(string) }),
 		boolDefWithActive("alipay.in_production", "payments", "alipay", "Alipay production mode", "Use Alipay production environment.", ApplyModeRestartRequired, false, true, func() bool { return cfg.If("Alipay") }, func() any { return conf.AlipaySetting.InProduction }, func() any { return bootstrapConfig.Alipay.InProduction }, func(v any) { conf.AlipaySetting.InProduction = v.(bool) }),
 	}
+}
+
+func meiliAPIKeyDefinition() Definition {
+	const key = "meili.api_key"
+	active := func() bool { return cfg.If("Meili") }
+	current := func() any { return conf.MeiliSetting.ApiKey }
+	bootstrap := func() any { return bootstrapConfig.Meili.ApiKey }
+	validator := validateTrimmedMax(key, 512)
+	if _, managedByEnvironment := os.LookupEnv("PAOPAO_MEILI_MASTER_KEY"); managedByEnvironment {
+		return stringDefWithActive(
+			key,
+			"search",
+			"meili",
+			"Meili API key",
+			"Managed by PAOPAO_MEILI_MASTER_KEY. Edit .env and run manage.sh up again.",
+			ApplyModeBootstrapOnly,
+			true,
+			false,
+			nil,
+			active,
+			current,
+			bootstrap,
+			validator,
+			nil,
+		)
+	}
+	return stringDefWithActive(
+		key,
+		"search",
+		"meili",
+		"Meili API key",
+		"Meilisearch API key.",
+		ApplyModeRestartRequired,
+		true,
+		true,
+		nil,
+		active,
+		current,
+		bootstrap,
+		validator,
+		func(v any) { conf.MeiliSetting.ApiKey = v.(string) },
+	)
+}
+
+func localOSSSecureDefinition() Definition {
+	const key = "local_oss.secure"
+	active := func() bool { return cfg.If("LocalOSS") }
+	current := func() any { return conf.LocalOSSSetting.Secure }
+	bootstrap := func() any { return bootstrapConfig.LocalOSS.Secure }
+	if _, managedByEnvironment := os.LookupEnv("PAOPAO_PUBLIC_SECURE"); managedByEnvironment {
+		return boolDefWithActive(
+			key,
+			"storage",
+			"local_oss",
+			"Local OSS secure",
+			"Managed by PAOPAO_PUBLIC_SECURE. Edit .env and run manage.sh up again.",
+			ApplyModeBootstrapOnly,
+			false,
+			false,
+			active,
+			current,
+			bootstrap,
+			nil,
+		)
+	}
+	return boolDefWithActive(
+		key,
+		"storage",
+		"local_oss",
+		"Local OSS secure",
+		"Generate HTTPS URLs for local object storage.",
+		ApplyModeRestartRequired,
+		false,
+		true,
+		active,
+		current,
+		bootstrap,
+		func(v any) { conf.LocalOSSSetting.Secure = v.(bool) },
+	)
+}
+
+func localOSSDomainDefinition() Definition {
+	const key = "local_oss.domain"
+	active := func() bool { return cfg.If("LocalOSS") }
+	current := func() any { return conf.LocalOSSSetting.Domain }
+	bootstrap := func() any { return bootstrapConfig.LocalOSS.Domain }
+	validator := validateTrimmedMax(key, 255)
+	if _, managedByEnvironment := os.LookupEnv("PAOPAO_PUBLIC_HOST"); managedByEnvironment {
+		return stringDefWithActive(
+			key,
+			"storage",
+			"local_oss",
+			"Local OSS domain",
+			"Managed by PAOPAO_PUBLIC_HOST. Edit .env and run manage.sh up again.",
+			ApplyModeBootstrapOnly,
+			false,
+			false,
+			nil,
+			active,
+			current,
+			bootstrap,
+			validator,
+			nil,
+		)
+	}
+	return stringDefWithActive(
+		key,
+		"storage",
+		"local_oss",
+		"Local OSS domain",
+		"Public domain for local object storage.",
+		ApplyModeRestartRequired,
+		false,
+		true,
+		nil,
+		active,
+		current,
+		bootstrap,
+		validator,
+		func(v any) { conf.LocalOSSSetting.Domain = v.(string) },
+	)
 }
 
 func registryMap() map[string]Definition {
@@ -674,13 +797,6 @@ func activeState(def Definition) bool {
 		return true
 	}
 	return def.Active()
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func logBootstrapApplyError(def Definition, err error) {

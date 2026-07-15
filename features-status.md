@@ -1,6 +1,11 @@
 ## Features Status
 功能项状态说明。
 
+> [!IMPORTANT]
+> 这是从原项目保留的历史快照，不代表 `xbzu/paopao-ce` 当前承诺或测试状态。
+> 当前可维护部署路线以根目录 `README*`、`INSTALL*`、`deploy/README*` 与 GitHub
+> Actions 中的 Simple/Standard 冒烟测试为准。
+
 ## 目前支持的功能集合
 #### 子服务
 * `OldWeb` 开启旧的Web服务(目前状态: 已弃，不可用)

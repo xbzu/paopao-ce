@@ -67,7 +67,9 @@ func serveRun(_cmd *cobra.Command, _args []string) {
 		shutdownFn, _ := conf.InitTelemetry()
 		defer shutdownFn()
 	}
-	internal.Initial()
+	if err := internal.Initial(); err != nil {
+		log.Fatalf("initialize runtime: %v", err)
+	}
 	sitesetting.Bootstrap(_cmd.Context(), conf.MustGormDB())
 	ss := service.MustInitService()
 	if len(ss) < 1 {

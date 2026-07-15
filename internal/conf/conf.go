@@ -130,6 +130,9 @@ func setupSetting(suite []string, noDefault bool) error {
 			return err
 		}
 	}
+	if err = applyDeploymentEnvironmentOverrides(JWTSetting, AdminSettingsSetting, MeiliSetting, MysqlSetting, LocalOSSSetting); err != nil {
+		return err
+	}
 
 	CacheSetting.CientSideCacheExpire *= time.Second
 	EventManagerSetting.MaxIdleTime *= time.Second

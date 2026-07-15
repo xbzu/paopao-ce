@@ -6,8 +6,10 @@ package web
 
 import (
 	"context"
+	"sort"
 	"time"
 
+	"github.com/alimy/tryst/cfg"
 	"github.com/gin-gonic/gin"
 	api "github.com/rocboss/paopao-ce/auto/api/v1"
 	"github.com/rocboss/paopao-ce/internal/conf"
@@ -16,6 +18,7 @@ import (
 	"github.com/rocboss/paopao-ce/internal/servants/base"
 	"github.com/rocboss/paopao-ce/internal/servants/chain"
 	"github.com/rocboss/paopao-ce/internal/sitesetting"
+	"github.com/rocboss/paopao-ce/pkg/version"
 	"github.com/rocboss/paopao-ce/pkg/xerror"
 	"github.com/sirupsen/logrus"
 )
@@ -46,7 +49,17 @@ func (s *adminSrv) ChangeUserStatus(req *web.ChangeUserStatusReq) error {
 }
 
 func (s *adminSrv) SiteInfo(req *web.SiteInfoReq) (*web.SiteInfoResp, error) {
-	res, err := &web.SiteInfoResp{ServerUpTime: s.serverUpTime}, error(nil)
+	res, err := &web.SiteInfoResp{
+		ServerUpTime:     s.serverUpTime,
+		DeploymentMode:   deploymentMode(),
+		RunMode:          conf.RunMode(),
+		Version:          runtimeVersion(),
+		DatabaseProvider: databaseProvider(),
+		CacheProvider:    cacheProvider(),
+		SearchProvider:   searchProvider(),
+		StorageProvider:  storageProvider(),
+		EnabledFeatures:  enabledFeatures(),
+	}, error(nil)
 	res.RegisterUserCount, err = s.Ds.GetRegisterUserCount()
 	if err != nil {
 		logrus.Errorf("get SiteInfo[1] occurs error: %s", err)
@@ -58,10 +71,109 @@ func (s *adminSrv) SiteInfo(req *web.SiteInfoReq) (*web.SiteInfoResp, error) {
 			logrus.Errorf("get Siteinfo[3] occurs error: %s", err)
 		}
 	} else {
-		logrus.Errorf("get Siteinfo[2] occurs error: %s", err)
+		logrus.Errorf("get Siteinfo[2] occurs error: %s", xerr)
+	}
+	if schema, xerr := s.settings.GetSchema(); xerr == nil {
+		for _, item := range schema.Items {
+			if item.Active {
+				res.ActiveSettingsCount++
+			}
+		}
+	} else {
+		logrus.Errorf("get SiteInfo settings schema occurs error: %s", xerr)
+	}
+	if values, xerr := s.settings.GetValues(context.Background()); xerr == nil {
+		res.HasPendingRestart = values.HasPendingRestart
+	} else {
+		logrus.Errorf("get SiteInfo settings values occurs error: %s", xerr)
 	}
 	// 错误进行宽松赦免处理
 	return res, nil
+}
+
+func runtimeVersion() string {
+	build := version.ReadBuildInfo()
+	if build.Version == "" || build.Version == "unknown" {
+		return build.Series
+	}
+	return build.Version
+}
+
+func deploymentMode() string {
+	switch {
+	case cfg.If("Sqlite3"):
+		return "Simple"
+	case cfg.If("MySQL"):
+		return "Standard"
+	default:
+		return "Custom"
+	}
+}
+
+func databaseProvider() string {
+	switch {
+	case cfg.If("Sqlite3"):
+		return "SQLite"
+	case cfg.Any("Postgres", "PostgreSQL"):
+		return "PostgreSQL"
+	case cfg.If("MySQL"):
+		return "MySQL"
+	default:
+		return "Not configured"
+	}
+}
+
+func cacheProvider() string {
+	if cfg.If("Redis") {
+		return "Redis"
+	}
+	return "Not configured"
+}
+
+func searchProvider() string {
+	switch {
+	case cfg.If("Meili"):
+		return "Meilisearch"
+	case cfg.If("Zinc"):
+		return "Zinc"
+	default:
+		return "Not configured"
+	}
+}
+
+func storageProvider() string {
+	switch {
+	case cfg.If("LocalOSS"):
+		return "Local OSS"
+	case cfg.If("MinIO"):
+		return "MinIO"
+	case cfg.If("S3"):
+		return "Amazon S3"
+	case cfg.If("COS"):
+		return "Tencent COS"
+	case cfg.If("HuaweiOBS"):
+		return "Huawei OBS"
+	case cfg.If("AliOSS"):
+		return "AliOSS"
+	default:
+		return "Not configured"
+	}
+}
+
+func enabledFeatures() []string {
+	candidates := []string{
+		"Web", "Frontend:EmbedWeb", "Migration", "MySQL", "Postgres", "PostgreSQL", "Sqlite3",
+		"Redis", "Meili", "Zinc", "LocalOSS", "MinIO", "S3", "AliOSS", "COS", "HuaweiOBS",
+		"Sms", "Alipay", "Metrics", "Pprof", "Sentry",
+	}
+	features := make([]string, 0, len(candidates))
+	for _, feature := range candidates {
+		if cfg.If(feature) {
+			features = append(features, feature)
+		}
+	}
+	sort.Strings(features)
+	return features
 }
 
 func (s *adminSrv) GetSiteSettings() (*web.SiteSettingsResp, error) {

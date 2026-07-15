@@ -11,10 +11,12 @@ App:
   RunMode: debug
 
 Features:
-  Default: ["Web", "Frontend:EmbedWeb", "Meili", "LocalOSS", "MySQL", "BigCacheIndex", "LoggerFile"]
+  Default: ["Standard"]
+  Simple: ["Web", "Frontend:EmbedWeb", "Sqlite3", "LocalOSS", "Redis", "Meili", "Migration"]
+  Standard: ["Web", "Frontend:EmbedWeb", "MySQL", "LocalOSS", "Redis", "Meili", "Migration"]
 
 WebServer:
-  HttpIp: 0.0.0.0
+  HttpIp: 127.0.0.1
   HttpPort: 8008
 
 Database:
@@ -23,7 +25,7 @@ Database:
 
 MySQL:
   Username: paopao
-  Password: paopao
+  Password: "CHANGE-ME-TO-A-LONG-RANDOM-PASSWORD"
   Host: db:3306
   DBName: paopao
   Charset: utf8mb4
@@ -36,7 +38,7 @@ Redis:
     - redis:6379
 
 JWT:
-  Secret: 18a6413dc4fe394c66345ebe501b2f26
+  Secret: "CHANGE-ME-TO-A-LONG-RANDOM-SECRET"
   Issuer: paopao-api
   Expire: 86400
 
@@ -49,7 +51,7 @@ AdminSettings:
 Meili:
   Host: meili:7700
   Index: paopao-data
-  ApiKey: paopao-meilisearch
+  ApiKey: "CHANGE-ME-TO-A-LONG-RANDOM-SECRET"
   Secure: false
 
 LocalOSS:

@@ -33,6 +33,7 @@ var (
 	ErrNoExistUsername         = xerror.NewError(20021, "用户不存在")
 	ErrNoAdminPermission       = xerror.NewError(20022, "无管理权限")
 	ErrDisallowUserRegister    = xerror.NewError(20023, "系统不允许注册用户")
+	ErrDisallowPhoneBind       = xerror.NewError(20024, "系统不允许绑定手机号")
 
 	ErrGetPostsFailed          = xerror.NewError(30001, "获取动态列表失败")
 	ErrCreatePostFailed        = xerror.NewError(30002, "动态发布失败")

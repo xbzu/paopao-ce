@@ -9,8 +9,10 @@ import (
 	stdjson "encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/alimy/tryst/cfg"
 	"github.com/rocboss/paopao-ce/internal/conf"
 	"github.com/rocboss/paopao-ce/internal/model/web"
 	"github.com/rocboss/paopao-ce/pkg/xerror"
@@ -73,9 +75,11 @@ type Service struct {
 	db       *gorm.DB
 	registry map[string]Definition
 	codec    *secretCodec
+	saveMu   sync.Mutex
 }
 
 func NewService(db *gorm.DB) *Service {
+	initializeRuntimePolicy()
 	ensureBootstrapSnapshot()
 	return &Service{db: db, registry: registryMap(), codec: newSecretCodec()}
 }
@@ -95,9 +99,10 @@ func (s *Service) ApplyPersistedOverrides(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	prepared := make([]preparedValue, 0, len(records))
 	for key, record := range records {
 		def, ok := s.registry[key]
-		if !ok || def.BootstrapOverride == nil || def.ApplyMode == ApplyModeBootstrapOnly {
+		if !ok || !activeState(def) || def.BootstrapOverride == nil || def.ApplyMode == ApplyModeBootstrapOnly {
 			continue
 		}
 		value, err := s.parseRecord(def, record)
@@ -105,13 +110,20 @@ func (s *Service) ApplyPersistedOverrides(ctx context.Context) error {
 			logBootstrapApplyError(def, err)
 			continue
 		}
-		def.BootstrapOverride(value)
+		prepared = append(prepared, preparedValue{Definition: def, Value: value})
+	}
+	if err := validatePreparedBatch(prepared); err != nil {
+		return err
+	}
+	for _, item := range prepared {
+		item.BootstrapOverride(item.Value)
 	}
 	return nil
 }
 
 func (s *Service) GetProfile(ctx context.Context) (*web.SiteProfileResp, error) {
 	_ = ctx
+	runtimePolicy := CurrentRuntimePolicy()
 	return &web.SiteProfileResp{
 		UseFriendship:             conf.WebProfileSetting.UseFriendship,
 		EnableTrendsBar:           conf.WebProfileSetting.EnableTrendsBar,
@@ -119,8 +131,8 @@ func (s *Service) GetProfile(ctx context.Context) (*web.SiteProfileResp, error) 
 		AllowTweetAttachment:      conf.WebProfileSetting.AllowTweetAttachment,
 		AllowTweetAttachmentPrice: conf.WebProfileSetting.AllowTweetAttachmentPrice,
 		AllowTweetVideo:           conf.WebProfileSetting.AllowTweetVideo,
-		AllowUserRegister:         conf.WebProfileSetting.AllowUserRegister,
-		AllowPhoneBind:            conf.WebProfileSetting.AllowPhoneBind,
+		AllowUserRegister:         runtimePolicy.AllowUserRegister,
+		AllowPhoneBind:            runtimePolicy.AllowPhoneBind,
 		DefaultTweetMaxLength:     conf.WebProfileSetting.DefaultTweetMaxLength,
 		TweetWebEllipsisSize:      conf.WebProfileSetting.TweetWebEllipsisSize,
 		TweetMobileEllipsisSize:   conf.WebProfileSetting.TweetMobileEllipsisSize,
@@ -199,6 +211,9 @@ func (s *Service) GetValues(ctx context.Context) (*web.AdminSettingsValuesResp, 
 }
 
 func (s *Service) SaveValues(ctx context.Context, inputs []web.AdminSettingValueInput) (*web.AdminSettingsSaveResp, error) {
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
+
 	if len(inputs) == 0 {
 		return nil, xerror.InvalidParams.WithDetails("items must not be empty")
 	}
@@ -215,6 +230,9 @@ func (s *Service) SaveValues(ctx context.Context, inputs []web.AdminSettingValue
 		if def.Readonly || def.ApplyMode == ApplyModeBootstrapOnly || def.BootstrapOverride == nil {
 			return nil, xerror.InvalidParams.WithDetails("setting is not editable: " + input.Key)
 		}
+		if !activeState(def) {
+			return nil, xerror.InvalidParams.WithDetails("setting feature is not active: " + input.Key)
+		}
 		if _, ok := seen[input.Key]; ok {
 			return nil, xerror.InvalidParams.WithDetails("duplicate setting key: " + input.Key)
 		}
@@ -225,17 +243,21 @@ func (s *Service) SaveValues(ctx context.Context, inputs []web.AdminSettingValue
 		}
 		prepared = append(prepared, preparedValue{Definition: def, Value: value})
 	}
-	if err := validatePreparedBatch(prepared); err != nil {
+	records, err := s.loadOverridesLenient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	candidate, err := s.mergePersistedCoupledValues(prepared, records)
+	if err != nil {
+		return nil, err
+	}
+	if err := validatePreparedBatch(candidate); err != nil {
 		return nil, err
 	}
 	if err := s.persistPrepared(ctx, prepared); err != nil {
 		return nil, err
 	}
-	for _, item := range prepared {
-		if item.ApplyMode == ApplyModeLive {
-			item.BootstrapOverride(item.Value)
-		}
-	}
+	applyLiveValues(prepared)
 	values, err := s.GetValues(ctx)
 	if err != nil {
 		return nil, err
@@ -247,9 +269,72 @@ func (s *Service) SaveValues(ctx context.Context, inputs []web.AdminSettingValue
 	return &web.AdminSettingsSaveResp{Items: values.Items, UpdatedKeys: updatedKeys, HasPendingRestart: values.HasPendingRestart}, nil
 }
 
+var coupledSettingKeys = []string{
+	"web_profile.default_tweet_max_length",
+	"web_profile.tweet_web_ellipsis_size",
+	"web_profile.tweet_mobile_ellipsis_size",
+	"app.default_page_size",
+	"app.max_page_size",
+}
+
+func (s *Service) mergePersistedCoupledValues(prepared []preparedValue, records map[string]settingRecord) ([]preparedValue, error) {
+	candidate := append([]preparedValue(nil), prepared...)
+	seen := make(map[string]struct{}, len(prepared))
+	for _, item := range prepared {
+		seen[item.Key] = struct{}{}
+	}
+	for _, key := range coupledSettingKeys {
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		record, ok := records[key]
+		if !ok {
+			continue
+		}
+		def, ok := s.registry[key]
+		if !ok || def.Readonly || def.ApplyMode == ApplyModeBootstrapOnly {
+			continue
+		}
+		value, err := s.parseRecord(def, record)
+		if err != nil {
+			return nil, xerror.InvalidParams.WithDetails("stored setting is invalid: " + key)
+		}
+		candidate = append(candidate, preparedValue{Definition: def, Value: value})
+	}
+	return candidate, nil
+}
+
 type preparedValue struct {
 	Definition
 	Value any
+}
+
+func applyLiveValues(prepared []preparedValue) {
+	hasRuntimePolicyUpdate := false
+	for _, item := range prepared {
+		if item.ApplyMode != ApplyModeLive {
+			continue
+		}
+		switch item.Key {
+		case "web_profile.allow_user_register", "web_profile.allow_phone_bind":
+			hasRuntimePolicyUpdate = true
+		default:
+			item.BootstrapOverride(item.Value)
+		}
+	}
+	if !hasRuntimePolicyUpdate {
+		return
+	}
+	updateRuntimePolicy(func(policy *RuntimePolicy) {
+		for _, item := range prepared {
+			switch item.Key {
+			case "web_profile.allow_user_register":
+				policy.AllowUserRegister = item.Value.(bool)
+			case "web_profile.allow_phone_bind":
+				policy.AllowPhoneBind = item.Value.(bool) && cfg.If("Sms")
+			}
+		}
+	})
 }
 
 func validatePreparedBatch(prepared []preparedValue) error {
@@ -324,7 +409,7 @@ func (s *Service) buildValueItems(records map[string]settingRecord) ([]web.Admin
 			item.Value = current
 			item.EffectiveValue = current
 		}
-		if record, ok := records[def.Key]; ok {
+		if record, ok := records[def.Key]; ok && !def.Readonly && def.ApplyMode != ApplyModeBootstrapOnly {
 			storedValue, err := s.parseRecord(def, record)
 			if err == nil {
 				item.Source = "override"

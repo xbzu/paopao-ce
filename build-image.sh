@@ -1,26 +1,20 @@
 #!/bin/sh
-# eg.1 : sh build-image.sh
-# eg.2, set image: sh build-image.sh bitbus/paopao-ce
 
-VERSION=`git describe --tags --always | cut -f1,2 -d "-"` # eg.: 0.2.5
-IMAGE="bitbus/paopao-ce"
+set -eu
 
-if [ -n "$1" ]; then
-  IMAGE="$1"
-fi
-if [ -n "$2" ]; then
-  VERSION="$2"
-fi
+IMAGE=${1:-xbzu/paopao-ce}
+VERSION=${2:-$(git describe --tags --always --dirty)}
+COMMIT=$(git rev-parse --short HEAD)
+BUILD_DATE=$(git show -s --format=%cI HEAD)
 
-# build image
 docker buildx build \
-  --build-arg USE_DIST="yes" \
-  --tag "$IMAGE:${VERSION}" \
+  --load \
+  --build-arg "VERSION=$VERSION" \
+  --build-arg "COMMIT=$COMMIT" \
+  --build-arg "BUILD_DATE=$BUILD_DATE" \
+  --tag "$IMAGE:$VERSION" \
   --tag "$IMAGE:latest" \
-  . -f Dockerfile
+  --file Dockerfile \
+  .
 
-# push to image rep
-# if [ -n "$1" ]; then
-#   docker push "$IMAGE:${VERSION}"
-#   docker push "$IMAGE:latest"
-# fi
+echo "Built $IMAGE:$VERSION locally. This command does not push or deploy it."

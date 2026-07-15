@@ -197,7 +197,7 @@ const menuOptions = computed(() => {
   });
   if (userInfo.value.is_admin) {
     options.push({
-      label: '系统配置',
+      label: '管理后台',
       key: 'admin-settings',
       icon: () => h(ConstructOutline),
       href: '/admin/settings',

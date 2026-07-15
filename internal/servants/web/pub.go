@@ -20,6 +20,7 @@ import (
 	"github.com/rocboss/paopao-ce/internal/model/web"
 	"github.com/rocboss/paopao-ce/internal/servants/base"
 	"github.com/rocboss/paopao-ce/internal/servants/web/assets"
+	"github.com/rocboss/paopao-ce/internal/sitesetting"
 	"github.com/rocboss/paopao-ce/pkg/app"
 	"github.com/rocboss/paopao-ce/pkg/utils"
 	"github.com/rocboss/paopao-ce/pkg/version"
@@ -38,6 +39,9 @@ type pubSrv struct {
 }
 
 func (s *pubSrv) SendCaptcha(req *web.SendCaptchaReq) error {
+	if !_enablePhoneVerify || !sitesetting.CurrentRuntimePolicy().AllowPhoneBind {
+		return web.ErrDisallowPhoneBind
+	}
 	ctx := context.Background()
 
 	// 验证图片验证码
@@ -87,7 +91,7 @@ func (s *pubSrv) GetCaptcha() (*web.GetCaptchaResp, error) {
 }
 
 func (s *pubSrv) Register(req *web.RegisterReq) (*web.RegisterResp, error) {
-	if _disallowUserRegister {
+	if !sitesetting.CurrentRuntimePolicy().AllowUserRegister {
 		return nil, web.ErrDisallowUserRegister
 	}
 	// 用户名检查

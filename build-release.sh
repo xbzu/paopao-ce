@@ -1,6 +1,6 @@
 #!/bin/sh
-# eg.1 : sh build-image.sh
-# eg.2, set tags: sh build-image.sh 'go_json'
+# Build standalone binary archives. This does not build or deploy containers.
+# Pass additional Go build tags as the first argument when needed.
 
 TAGS='go_json'
 

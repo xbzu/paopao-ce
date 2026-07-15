@@ -8,6 +8,8 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -495,9 +497,13 @@ func endpoint(host string, secure bool) string {
 
 func newViper() (*viper.Viper, error) {
 	vp := viper.New()
-	vp.SetConfigName("config")
-	vp.AddConfigPath(".")
-	vp.AddConfigPath("custom/")
+	if configFile := strings.TrimSpace(os.Getenv("PAOPAO_CONFIG_FILE")); configFile != "" {
+		vp.SetConfigFile(configFile)
+	} else {
+		vp.SetConfigName("config")
+		vp.AddConfigPath(".")
+		vp.AddConfigPath("custom/")
+	}
 	vp.SetConfigType("yaml")
 	err := vp.ReadConfig(bytes.NewReader(configBytes))
 	if err != nil {
@@ -506,7 +512,43 @@ func newViper() (*viper.Viper, error) {
 	if err = vp.MergeInConfig(); err != nil {
 		return nil, err
 	}
+
 	return vp, nil
+}
+
+func applyDeploymentEnvironmentOverrides(
+	jwt *jwtConf,
+	adminSettings *adminSettingsConf,
+	meili *meiliConf,
+	mysql *mysqlConf,
+	localOSS *localossConf,
+) error {
+	// Apply deployment-only values after each complete YAML section has been
+	// unmarshaled. Setting nested Viper keys before UnmarshalKey can shadow the
+	// rest of the parent section and silently clear sibling fields.
+	if value, ok := os.LookupEnv("PAOPAO_JWT_SECRET"); ok && jwt != nil {
+		jwt.Secret = value
+	}
+	if value, ok := os.LookupEnv("PAOPAO_ADMIN_SETTINGS_KEY"); ok && adminSettings != nil {
+		adminSettings.EncryptionKey = value
+	}
+	if value, ok := os.LookupEnv("PAOPAO_MEILI_MASTER_KEY"); ok && meili != nil {
+		meili.ApiKey = value
+	}
+	if value, ok := os.LookupEnv("PAOPAO_MYSQL_PASSWORD"); ok && mysql != nil {
+		mysql.Password = value
+	}
+	if value, ok := os.LookupEnv("PAOPAO_PUBLIC_HOST"); ok && localOSS != nil {
+		localOSS.Domain = value
+	}
+	if value, ok := os.LookupEnv("PAOPAO_PUBLIC_SECURE"); ok && localOSS != nil {
+		secure, err := strconv.ParseBool(strings.TrimSpace(value))
+		if err != nil {
+			return fmt.Errorf("invalid PAOPAO_PUBLIC_SECURE: %w", err)
+		}
+		localOSS.Secure = secure
+	}
+	return nil
 }
 
 func featuresInfoFrom(vp *viper.Viper, k string) (map[string][]string, map[string]string) {

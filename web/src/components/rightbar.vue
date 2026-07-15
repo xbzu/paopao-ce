@@ -79,7 +79,11 @@
             </div>
         </n-card>
         <div class="site-info" v-if="userInfo.is_admin" ref="userInfoElement">
-            <span class="site-info-item">{{ registerUserCount }} 注册用户，{{ onlineUserCount }} 人在线，最高在线 {{ historyMaxOnline }} 人，站点上线于 {{ formatRelativeTime(serverUpTime) }}</span>
+            <span class="site-info-item">
+                {{ registerUserCount }} 注册用户，{{ onlineUserCount }} 人在线，最高在线
+                {{ historyMaxOnline }} 人<span v-if="serverUpTime > 0">，本次进程启动于
+                {{ formatRelativeTime(serverUpTime) }}</span>
+            </span>
         </div>
     </div>
 </template>

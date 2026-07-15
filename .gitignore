@@ -8,6 +8,8 @@ __debug_bin
 /paopao-ce
 /paopao
 /.env
+/.env.*
+!/.env.example
 /.envrc
 /release
 /data

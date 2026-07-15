@@ -1,0 +1,54 @@
+App:
+  RunMode: release
+
+Features:
+  Default: ["Web", "Frontend:EmbedWeb", "MySQL", "LocalOSS", "Redis", "Meili", "Migration"]
+
+WebServer:
+  RunMode: release
+  HttpIp: 0.0.0.0
+  HttpPort: 8008
+
+Database:
+  LogLevel: error
+  TablePrefix: p_
+
+MySQL:
+  Username: paopao
+  Password: "OVERRIDDEN-BY-PAOPAO_MYSQL_PASSWORD"
+  Host: mysql:3306
+  DBName: paopao
+  Charset: utf8mb4
+  ParseTime: true
+  MaxIdleConns: 10
+  MaxOpenConns: 30
+
+Redis:
+  InitAddress:
+    - redis:6379
+
+JWT:
+  Secret: "OVERRIDDEN-BY-PAOPAO_JWT_SECRET"
+  Issuer: paopao-api
+  Expire: 86400
+
+AdminSettings:
+  EncryptionKey: "OVERRIDDEN-BY-PAOPAO_ADMIN_SETTINGS_KEY"
+
+Meili:
+  Host: meilisearch:7700
+  Index: paopao-data
+  ApiKey: "OVERRIDDEN-BY-PAOPAO_MEILI_MASTER_KEY"
+  Secure: false
+
+LocalOSS:
+  SavePath: custom/data/oss
+  Secure: false
+  Bucket: paopao
+  Domain: localhost:8008
+
+WebProfile:
+  AllowUserRegister: true
+  AllowPhoneBind: false
+  EnableWallet: false
+  AllowTweetAttachmentPrice: false

@@ -19,6 +19,7 @@ import (
 	"github.com/rocboss/paopao-ce/internal/model/web"
 	"github.com/rocboss/paopao-ce/internal/servants/base"
 	"github.com/rocboss/paopao-ce/internal/servants/chain"
+	"github.com/rocboss/paopao-ce/internal/sitesetting"
 	"github.com/rocboss/paopao-ce/pkg/xerror"
 	"github.com/sirupsen/logrus"
 )
@@ -232,30 +233,30 @@ func (s *coreSrv) GetCollections(req *web.GetCollectionsReq) (*web.GetCollection
 }
 
 func (s *coreSrv) UserPhoneBind(req *web.UserPhoneBindReq) error {
+	if !_enablePhoneVerify || !sitesetting.CurrentRuntimePolicy().AllowPhoneBind {
+		return web.ErrDisallowPhoneBind
+	}
 	// 手机重复性检查
 	u, err := s.Ds.GetUserByPhone(req.Phone)
 	if err == nil && u.Model != nil && u.ID != 0 && u.ID != req.User.ID {
 		return web.ErrExistedUserPhone
 	}
 
-	// 如果禁止phone verify 则允许通过任意验证码
-	if _enablePhoneVerify {
-		c, err := s.Ds.GetLatestPhoneCaptcha(req.Phone)
-		if err != nil {
-			return web.ErrErrorPhoneCaptcha
-		}
-		if c.Captcha != req.Captcha {
-			return web.ErrErrorPhoneCaptcha
-		}
-		if c.ExpiredOn < time.Now().Unix() {
-			return web.ErrErrorPhoneCaptcha
-		}
-		if c.UseTimes >= _maxCaptchaTimes {
-			return web.ErrMaxPhoneCaptchaUseTimes
-		}
-		// 更新检测次数
-		s.Ds.UsePhoneCaptcha(c)
+	c, err := s.Ds.GetLatestPhoneCaptcha(req.Phone)
+	if err != nil {
+		return web.ErrErrorPhoneCaptcha
 	}
+	if c.Captcha != req.Captcha {
+		return web.ErrErrorPhoneCaptcha
+	}
+	if c.ExpiredOn < time.Now().Unix() {
+		return web.ErrErrorPhoneCaptcha
+	}
+	if c.UseTimes >= _maxCaptchaTimes {
+		return web.ErrMaxPhoneCaptchaUseTimes
+	}
+	// 更新检测次数
+	s.Ds.UsePhoneCaptcha(c)
 
 	// 执行绑定
 	user := req.User

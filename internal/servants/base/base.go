@@ -10,7 +10,6 @@ import (
 	"math"
 	"net/http"
 
-	"github.com/alimy/mir/v5"
 	"github.com/cockroachdb/errors"
 	"github.com/getsentry/sentry-go"
 	sentrygin "github.com/getsentry/sentry-go/gin"
@@ -83,10 +82,9 @@ func UserNameFrom(c *gin.Context) (string, bool) {
 }
 
 func bindAny(c *gin.Context, obj any) error {
-	var errs xerror.ValidErrors
 	err := c.ShouldBind(obj)
 	if err != nil {
-		return mir.NewError(xerror.InvalidParams.StatusCode(), xerror.InvalidParams.WithDetails(errs.Error()))
+		return xerror.InvalidParams.WithDetails(err.Error())
 	}
 	// setup *core.User if needed
 	if setter, ok := obj.(UserSetter); ok {
@@ -108,10 +106,9 @@ func bindAny(c *gin.Context, obj any) error {
 
 func bindAnySentry(c *gin.Context, obj any) error {
 	hub := sentrygin.GetHubFromContext(c)
-	var errs xerror.ValidErrors
 	err := c.ShouldBind(obj)
 	if err != nil {
-		xerr := mir.NewError(xerror.InvalidParams.StatusCode(), xerror.InvalidParams.WithDetails(errs.Error()))
+		xerr := xerror.InvalidParams.WithDetails(err.Error())
 		if hub != nil {
 			hub.CaptureException(errors.Wrap(xerr, "bind object"))
 		}
@@ -149,8 +146,9 @@ func RenderAny(c *gin.Context, data any, err error) {
 	} else {
 		statusCode, code := xerror.HttpStatusCode(err)
 		c.JSON(statusCode, &joint.JsonResp{
-			Code: code,
-			Msg:  err.Error(),
+			Code:    code,
+			Msg:     err.Error(),
+			Details: errorDetails(err),
 		})
 	}
 }
@@ -173,10 +171,19 @@ func (s *BaseServant) Render(c *gin.Context, data any, err error) {
 	} else {
 		statusCode, code := xerror.HttpStatusCode(err)
 		c.JSON(statusCode, &joint.JsonResp{
-			Code: code,
-			Msg:  err.Error(),
+			Code:    code,
+			Msg:     err.Error(),
+			Details: errorDetails(err),
 		})
 	}
+}
+
+func errorDetails(err error) []string {
+	var xerr *xerror.Error
+	if errors.As(err, &xerr) {
+		return xerr.Details()
+	}
+	return nil
 }
 
 func (s *DaoServant) PrepareUser(userId int64, user *ms.UserFormated) error {

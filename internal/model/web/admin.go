@@ -15,8 +15,18 @@ type SiteInfoReq struct {
 }
 
 type SiteInfoResp struct {
-	RegisterUserCount int64 `json:"register_user_count"`
-	OnlineUserCount   int   `json:"online_user_count"`
-	HistoryMaxOnline  int   `json:"history_max_online"`
-	ServerUpTime      int64 `json:"server_up_time"`
+	RegisterUserCount   int64    `json:"register_user_count"`
+	OnlineUserCount     int      `json:"online_user_count"`
+	HistoryMaxOnline    int      `json:"history_max_online"`
+	ServerUpTime        int64    `json:"server_up_time"`
+	DeploymentMode      string   `json:"deployment_mode"`
+	RunMode             string   `json:"run_mode"`
+	Version             string   `json:"version"`
+	DatabaseProvider    string   `json:"database_provider"`
+	CacheProvider       string   `json:"cache_provider"`
+	SearchProvider      string   `json:"search_provider"`
+	StorageProvider     string   `json:"storage_provider"`
+	EnabledFeatures     []string `json:"enabled_features"`
+	HasPendingRestart   bool     `json:"has_pending_restart"`
+	ActiveSettingsCount int      `json:"active_settings_count"`
 }

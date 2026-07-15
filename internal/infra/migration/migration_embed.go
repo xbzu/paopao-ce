@@ -9,6 +9,7 @@ package migration
 
 import (
 	"database/sql"
+	"fmt"
 
 	"github.com/alimy/tryst/cfg"
 	"github.com/golang-migrate/migrate/v4"
@@ -23,10 +24,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func Run() {
+func Run() error {
 	if !cfg.If("Migration") {
 		logrus.Infoln("skip migrate because not add Migration feature in config.yaml")
-		return
+		return nil
 	}
 
 	var (
@@ -50,8 +51,7 @@ func Run() {
 		db, err = sql.Open("mysql", conf.MysqlSetting.Dsn())
 	}
 	if err != nil {
-		logrus.Errorf("initial db for migration failed: %s", err)
-		return
+		return fmt.Errorf("initial database for migration: %w", err)
 	}
 
 	migrationsTable := conf.DatabaseSetting.TablePrefix + "schema_migrations"
@@ -70,25 +70,22 @@ func Run() {
 	}
 
 	if err2 != nil {
-		logrus.Errorf("new database driver failed: %s", err)
-		return
+		return fmt.Errorf("new migration database driver: %w", err2)
 	} else {
 		defer dbDriver.Close()
 	}
 	if err != nil {
-		logrus.Errorf("new source driver failed: %s", err)
-		return
+		return fmt.Errorf("new migration source driver: %w", err)
 	}
 
 	m, err := migrate.NewWithInstance("iofs", srcDriver, dbName, dbDriver)
 	if err != nil {
-		logrus.Errorf("new migrate instance failed: %s", err)
-		return
+		return fmt.Errorf("new migrate instance: %w", err)
 	}
 
 	if err = m.Up(); err != nil && err != migrate.ErrNoChange {
-		logrus.Errorf("migrate up failed: %s", err)
-		return
+		return fmt.Errorf("migrate up: %w", err)
 	}
 	logrus.Infoln("migrate up success")
+	return nil
 }

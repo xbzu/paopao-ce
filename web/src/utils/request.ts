@@ -28,7 +28,9 @@ service.interceptors.response.use(
 		if (+code === 0) {
 			return data || {};
 		} else {
-			Promise.reject(response?.data || {});
+			const businessError = response?.data || {};
+			window.$message.error(responseErrorMessage(businessError, '请求失败'));
+			return Promise.reject(businessError);
 		}
 	},
 	(error = {}) => {
@@ -38,17 +40,22 @@ service.interceptors.response.use(
 			localStorage.removeItem(TOKEN_KEY);
 
 			if (response?.data.code !== 10005) {
-				window.$message.warning(response?.data.msg || '鉴权失败');
+				window.$message.warning(responseErrorMessage(response?.data, '鉴权失败'));
 			} else {
 				// 打开登录弹窗
 				useStoreMain().triggerAuth(true);
 			}
 		} else {
-			window.$message.error(response?.data?.msg || '请求失败');
+			window.$message.error(responseErrorMessage(response?.data, '请求失败'));
 		}
 		return Promise.reject(response?.data || {});
 	},
 );
+
+function responseErrorMessage(error: any, fallback: string): string {
+	const detail = error?.details?.[0];
+	return (typeof detail === 'string' && detail.trim()) || error?.msg || fallback;
+}
 
 export default service;
 
