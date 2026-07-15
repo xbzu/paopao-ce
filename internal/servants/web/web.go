@@ -19,14 +19,13 @@ import (
 )
 
 var (
-	_enablePhoneVerify    bool
-	_disallowUserRegister bool
-	_ds                   core.DataService
-	_ac                   core.AppCache
-	_wc                   core.WebCache
-	_oss                  core.ObjectStorageService
-	_siteSettings         *sitesetting.Service
-	_onceInitial          sync.Once
+	_enablePhoneVerify bool
+	_ds                core.DataService
+	_ac                core.AppCache
+	_wc                core.WebCache
+	_oss               core.ObjectStorageService
+	_siteSettings      *sitesetting.Service
+	_onceInitial       sync.Once
 )
 
 // RouteWeb register web route
@@ -58,7 +57,6 @@ func RouteWeb(e *gin.Engine) {
 func lazyInitial() {
 	_onceInitial.Do(func() {
 		_enablePhoneVerify = cfg.If("Sms")
-		_disallowUserRegister = cfg.If("Web:DisallowUserRegister")
 		_maxWhisperNumDaily = conf.AppSetting.MaxWhisperDaily
 		_maxCaptchaTimes = conf.AppSetting.MaxCaptchaTimes
 		_oss = dao.ObjectStorageService()

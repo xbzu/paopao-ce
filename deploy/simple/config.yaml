@@ -1,0 +1,49 @@
+# Simple deployment: SQLite for durable data, LocalOSS for uploads, and only
+# the web port exposed by Compose. Secrets are supplied through PAOPAO_* envs.
+App:
+  RunMode: release
+
+Features:
+  Default: ["Web", "Frontend:EmbedWeb", "Sqlite3", "LocalOSS", "Redis", "Meili", "Migration"]
+
+WebServer:
+  RunMode: release
+  HttpIp: 0.0.0.0
+  HttpPort: 8008
+
+Database:
+  LogLevel: error
+  TablePrefix: p_
+
+Sqlite3:
+  Path: custom/data/sqlite3/paopao-ce.db
+
+Redis:
+  InitAddress:
+    - redis:6379
+
+JWT:
+  Secret: "OVERRIDDEN-BY-PAOPAO_JWT_SECRET"
+  Issuer: paopao-api
+  Expire: 86400
+
+AdminSettings:
+  EncryptionKey: "OVERRIDDEN-BY-PAOPAO_ADMIN_SETTINGS_KEY"
+
+Meili:
+  Host: meilisearch:7700
+  Index: paopao-data
+  ApiKey: "OVERRIDDEN-BY-PAOPAO_MEILI_MASTER_KEY"
+  Secure: false
+
+LocalOSS:
+  SavePath: custom/data/oss
+  Secure: false
+  Bucket: paopao
+  Domain: localhost:8008
+
+WebProfile:
+  AllowUserRegister: true
+  AllowPhoneBind: false
+  EnableWallet: false
+  AllowTweetAttachmentPrice: false

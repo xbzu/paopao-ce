@@ -1,10 +1,132 @@
 <template>
     <div>
-        <main-nav title="系统配置" />
+        <main-nav title="管理后台" />
 
-        <n-card title="系统配置" size="small" class="setting-card">
+        <n-alert
+            v-if="loadError"
+            title="管理数据加载失败"
+            type="error"
+            class="load-error-alert"
+        >
+            <div class="load-error-content">
+                <span>{{ loadError }}</span>
+                <n-button size="small" type="error" secondary @click="loadSettings">
+                    重新加载
+                </n-button>
+            </div>
+        </n-alert>
+
+        <n-card
+            v-if="siteInfo && !loadError"
+            title="运行概览"
+            size="small"
+            class="overview-card"
+        >
+            <template #header-extra>
+                <n-tag
+                    round
+                    size="small"
+                    :type="siteInfo.has_pending_restart ? 'warning' : 'success'"
+                >
+                    {{ siteInfo.has_pending_restart ? "存在待重启配置" : "无待重启配置" }}
+                </n-tag>
+            </template>
+
+            <div class="overview-stats">
+                <div class="overview-stat">
+                    <span class="overview-stat-label">注册用户</span>
+                    <strong class="overview-stat-value">
+                        {{ siteInfo.register_user_count }}
+                    </strong>
+                </div>
+                <div class="overview-stat">
+                    <span class="overview-stat-label">当前在线</span>
+                    <strong class="overview-stat-value">
+                        {{ siteInfo.online_user_count }}
+                    </strong>
+                </div>
+                <div class="overview-stat">
+                    <span class="overview-stat-label">历史最高在线</span>
+                    <strong class="overview-stat-value">
+                        {{ siteInfo.history_max_online }}
+                    </strong>
+                </div>
+                <div class="overview-stat">
+                    <span class="overview-stat-label">当前适用配置项</span>
+                    <strong class="overview-stat-value">
+                        {{ siteInfo.active_settings_count }}
+                    </strong>
+                </div>
+            </div>
+
+            <div class="overview-details">
+                <div class="overview-detail-item">
+                    <span>本次启动时间</span>
+                    <strong>{{ formatServerStart(siteInfo.server_up_time) }}</strong>
+                </div>
+                <div class="overview-detail-item">
+                    <span>版本</span>
+                    <strong>{{ runtimeText(siteInfo.version) }}</strong>
+                </div>
+                <div class="overview-detail-item">
+                    <span>部署模式</span>
+                    <strong>{{ runtimeText(siteInfo.deployment_mode) }}</strong>
+                </div>
+                <div class="overview-detail-item">
+                    <span>运行模式</span>
+                    <strong>{{ runtimeText(siteInfo.run_mode) }}</strong>
+                </div>
+                <div class="overview-detail-item">
+                    <span>数据库</span>
+                    <strong>{{ runtimeText(siteInfo.database_provider) }}</strong>
+                </div>
+                <div class="overview-detail-item">
+                    <span>缓存</span>
+                    <strong>{{ runtimeText(siteInfo.cache_provider) }}</strong>
+                </div>
+                <div class="overview-detail-item">
+                    <span>搜索</span>
+                    <strong>{{ runtimeText(siteInfo.search_provider) }}</strong>
+                </div>
+                <div class="overview-detail-item">
+                    <span>存储</span>
+                    <strong>{{ runtimeText(siteInfo.storage_provider) }}</strong>
+                </div>
+                <div class="overview-detail-item overview-detail-features">
+                    <span>已启用功能</span>
+                    <n-space
+                        v-if="(siteInfo.enabled_features ?? []).length > 0"
+                        size="small"
+                    >
+                        <n-tag
+                            v-for="feature in siteInfo.enabled_features ?? []"
+                            :key="feature"
+                            round
+                            size="small"
+                        >
+                            {{ feature }}
+                        </n-tag>
+                    </n-space>
+                    <strong v-else>基础功能</strong>
+                </div>
+            </div>
+        </n-card>
+
+        <n-card v-if="!loadError" title="系统配置" size="small" class="setting-card">
             <n-spin :show="loading">
                 <n-space vertical size="large" class="settings-layout">
+                    <div class="settings-toolbar">
+                        <n-input
+                            v-model:value="searchKeyword"
+                            clearable
+                            round
+                            placeholder="搜索中文名称、说明或配置 Key"
+                        />
+                        <span class="filter-result-text">
+                            {{ filterResultText }}
+                        </span>
+                    </div>
+
                     <n-alert
                         v-if="hasPendingRestart"
                         type="warning"
@@ -13,8 +135,18 @@
                         检测到部分配置已经保存，但需要重启服务后才会切换到新值。带有“待重启”标记的配置当前仍在使用旧的生效值。
                     </n-alert>
 
-                    <div v-if="activeDomains.length === 0" class="empty-wrap">
-                        <n-empty size="large" description="暂无可显示的配置项" />
+                    <div
+                        v-if="!loading && filteredItemCount === 0"
+                        class="empty-wrap"
+                    >
+                        <n-empty
+                            size="large"
+                            :description="
+                                searchKeyword.trim()
+                                    ? '没有匹配的配置项'
+                                    : '暂无可显示的配置项'
+                            "
+                        />
                     </div>
 
                     <div
@@ -57,7 +189,7 @@
                                 <div class="setting-item-top">
                                     <div>
                                         <div class="setting-item-title">
-                                            {{ entry.schema.label }}
+                                            {{ displayLabel(entry.schema) }}
                                         </div>
                                         <div class="setting-item-key">
                                             {{ entry.schema.key }}
@@ -111,7 +243,7 @@
                                 </div>
 
                                 <div class="setting-item-description">
-                                    {{ entry.schema.description }}
+                                    {{ displayDescription(entry.schema) }}
                                 </div>
 
                                 <div class="setting-meta">
@@ -148,13 +280,27 @@
                                     </template>
                                     <template v-else-if="entry.schema.type === 'bool'">
                                         <n-switch
-                                            v-model:value="draftValues[entry.schema.key]"
+                                            :value="booleanDraftValue(entry.schema.key)"
+                                            @update:value="
+                                                (value) =>
+                                                    setDraftValue(
+                                                        entry.schema.key,
+                                                        value
+                                                    )
+                                            "
                                             :disabled="!isEditable(entry.schema)"
                                         />
                                     </template>
                                     <template v-else-if="hasOptions(entry.schema)">
                                         <n-select
-                                            v-model:value="draftValues[entry.schema.key]"
+                                            :value="selectDraftValue(entry.schema.key)"
+                                            @update:value="
+                                                (value) =>
+                                                    setDraftValue(
+                                                        entry.schema.key,
+                                                        value
+                                                    )
+                                            "
                                             :options="settingOptions(entry.schema)"
                                             :disabled="!isEditable(entry.schema)"
                                         />
@@ -166,7 +312,14 @@
                                         "
                                     >
                                         <n-input-number
-                                            v-model:value="draftValues[entry.schema.key]"
+                                            :value="numericDraftValue(entry.schema.key)"
+                                            @update:value="
+                                                (value) =>
+                                                    setDraftValue(
+                                                        entry.schema.key,
+                                                        value
+                                                    )
+                                            "
                                             class="number-input"
                                             :precision="
                                                 entry.schema.type === 'float' ? 4 : 0
@@ -179,7 +332,14 @@
                                     </template>
                                     <template v-else>
                                         <n-input
-                                            v-model:value="draftValues[entry.schema.key]"
+                                            :value="stringDraftValue(entry.schema.key)"
+                                            @update:value="
+                                                (value) =>
+                                                    setDraftValue(
+                                                        entry.schema.key,
+                                                        value
+                                                    )
+                                            "
                                             :type="
                                                 useTextarea(entry.schema)
                                                     ? 'textarea'
@@ -233,7 +393,7 @@
                                         <div class="inactive-item-top">
                                             <div>
                                                 <div class="setting-item-title">
-                                                    {{ entry.schema.label }}
+                                                    {{ displayLabel(entry.schema) }}
                                                 </div>
                                                 <div class="setting-item-key">
                                                     {{ entry.schema.key }}
@@ -267,7 +427,7 @@
                                             </n-space>
                                         </div>
                                         <div class="setting-item-description">
-                                            {{ entry.schema.description }}
+                                            {{ displayDescription(entry.schema) }}
                                         </div>
                                         <div class="setting-meta inactive-meta">
                                             <span class="meta-item">
@@ -292,19 +452,20 @@
                         <n-button
                             round
                             quaternary
-                            :disabled="saving || loading"
+                            :disabled="saving || loading || changedCount === 0"
                             @click="handleReset"
                         >
-                            重置未保存更改
+                            重置更改（{{ changedCount }}）
                         </n-button>
                         <n-button
                             round
                             type="primary"
                             secondary
                             :loading="saving"
+                            :disabled="loading || changedCount === 0"
                             @click="handleSave"
                         >
-                            保存配置
+                            保存配置（{{ changedCount }}）
                         </n-button>
                     </div>
                 </n-space>
@@ -322,11 +483,13 @@ import { getSiteProfile } from "@/api/site";
 import { useStoreMain } from "@/store/main";
 import { useStoreProfile } from "@/store/profile";
 import { TOKEN_KEY, useStoreUser } from "@/store/user";
+import { formatTime } from "@/utils/formatTime";
 import { Api } from "@/utils/request";
 
 type SettingPrimitive = string | number | boolean | null;
 type SchemaItem = Api.Admin.NetReq.SettingsSchemaItem;
 type ValueItem = Api.Admin.NetReq.SettingsValueItem;
+type SiteInfo = Api.Admin.NetReq.SiteInfoResp;
 type ViewItem = {
     schema: SchemaItem;
     value?: ValueItem;
@@ -370,6 +533,161 @@ const sectionLabelMap: Record<string, string> = {
     alipay: "支付宝",
 };
 
+const settingCopyMap: Record<string, [string, string]> = {
+    "meili.api_key": [
+        "Meilisearch 主密钥",
+        "配置应用连接 Meilisearch 时使用的主密钥。",
+    ],
+    "web_profile.use_friendship": [
+        "好友关系模式",
+        "开启后，前台使用双向好友关系功能。",
+    ],
+    "web_profile.enable_trends_bar": [
+        "显示趋势侧栏",
+        "控制网页端是否展示趋势与热门内容侧栏。",
+    ],
+    "web_profile.enable_wallet": [
+        "显示钱包入口",
+        "控制前台钱包入口的显示，不等同于支付服务总开关。",
+    ],
+    "web_profile.allow_tweet_attachment": [
+        "允许帖子附件",
+        "控制前台是否允许在帖子中添加文件附件。",
+    ],
+    "web_profile.allow_tweet_attachment_price": [
+        "允许付费附件",
+        "控制前台是否允许为帖子附件设置价格。",
+    ],
+    "web_profile.allow_tweet_video": [
+        "允许视频帖子",
+        "控制前台是否显示帖子视频上传功能。",
+    ],
+    "web_profile.allow_user_register": [
+        "允许用户注册",
+        "关闭后，注册接口会立即停止接受新用户；已登录用户不受影响。",
+    ],
+    "web_profile.allow_phone_bind": [
+        "允许绑定手机号",
+        "关闭后，验证码发送和手机号绑定接口会立即停止使用。",
+    ],
+    "web_profile.default_tweet_max_length": [
+        "帖子最大字数",
+        "设置单条帖子允许输入的最大字数。",
+    ],
+    "web_profile.tweet_web_ellipsis_size": [
+        "网页摘要字数",
+        "设置网页信息流中帖子摘要的截断长度。",
+    ],
+    "web_profile.tweet_mobile_ellipsis_size": [
+        "移动端摘要字数",
+        "设置移动端信息流中帖子摘要的截断长度。",
+    ],
+    "web_profile.default_tweet_visibility": [
+        "默认帖子可见范围",
+        "设置用户新建帖子时默认选择的可见范围。",
+    ],
+    "web_profile.default_msg_loop_interval": [
+        "消息轮询间隔",
+        "设置前台检查未读消息的间隔，单位为毫秒。",
+    ],
+    "web_profile.copyright_top": [
+        "版权主文字",
+        "设置前台页脚顶部显示的版权文字。",
+    ],
+    "web_profile.copyright_left": [
+        "左侧页脚文字",
+        "设置前台页脚左侧链接的显示文字。",
+    ],
+    "web_profile.copyright_left_link": [
+        "左侧页脚链接",
+        "设置前台页脚左侧文字跳转的链接。",
+    ],
+    "web_profile.copyright_right": [
+        "右侧页脚文字",
+        "设置前台页脚右侧链接的显示文字。",
+    ],
+    "web_profile.copyright_right_link": [
+        "右侧页脚链接",
+        "设置前台页脚右侧文字跳转的链接。",
+    ],
+    "app.max_comment_count": [
+        "单帖评论上限",
+        "设置一条帖子最多允许保留的评论数量。",
+    ],
+    "app.attachment_income_rate": [
+        "附件收入分成比例",
+        "设置付费附件收入结算给作者的比例。",
+    ],
+    "app.default_page_size": [
+        "默认分页数量",
+        "设置列表接口每页默认返回的记录数。",
+    ],
+    "app.max_page_size": [
+        "最大分页数量",
+        "设置列表接口单页允许请求的最大记录数。",
+    ],
+    "app.max_whisper_daily": [
+        "每日私信上限",
+        "设置单个用户每天允许发送的私信数量。",
+    ],
+    "app.max_captcha_times": [
+        "验证码请求上限",
+        "设置验证码请求次数阈值。",
+    ],
+    "tweet_search.max_update_qps": [
+        "搜索索引更新速率",
+        "设置搜索索引后台更新的每秒处理上限。",
+    ],
+    "tweet_search.min_worker": [
+        "搜索索引工作线程",
+        "设置搜索索引后台任务的最小工作线程数。",
+    ],
+    "object_storage.retain_in_days": [
+        "临时对象保留天数",
+        "设置临时上传对象的保留时间。",
+    ],
+    "object_storage.temp_dir": [
+        "临时对象目录",
+        "设置对象存储使用的临时目录或前缀。",
+    ],
+};
+
+const settingFieldLabelMap: Record<string, string> = {
+    host: "服务地址",
+    index: "索引名称",
+    api_key: "API 密钥",
+    secure: "启用 HTTPS",
+    user: "用户名",
+    password: "密码",
+    save_path: "本地保存路径",
+    bucket: "存储桶",
+    domain: "访问域名",
+    access_key: "Access Key",
+    secret_key: "Secret Key",
+    endpoint: "服务端点",
+    access_key_id: "Access Key ID",
+    access_key_secret: "Access Key Secret",
+    secret_id: "Secret ID",
+    region: "区域",
+    gateway: "短信网关",
+    key: "短信密钥",
+    tpl_id: "短信模板 ID",
+    tpl_val: "短信模板参数",
+    app_id: "应用 ID",
+    private_key: "应用私钥",
+    root_cert_file: "支付宝根证书文件",
+    public_cert_file: "支付宝公钥证书文件",
+    app_public_cert_file: "应用公钥证书文件",
+    in_production: "使用生产环境",
+};
+
+const visibilityLabelMap: Record<string, string> = {
+    public: "公开",
+    following: "关注可见",
+    friend: "好友可见",
+    private: "仅自己",
+};
+
 const storeMain = useStoreMain();
 const storeUser = useStoreUser();
 const storeProfile = useStoreProfile();
@@ -378,7 +696,10 @@ const router = useRouter();
 
 const loading = ref(false);
 const saving = ref(false);
+const loadError = ref("");
 const hasPendingRestart = ref(false);
+const searchKeyword = ref("");
+const siteInfo = ref<SiteInfo | null>(null);
 const schemaItems = ref<SchemaItem[]>([]);
 const valueItems = ref<ValueItem[]>([]);
 const draftValues = reactive<Record<string, SettingPrimitive>>({});
@@ -393,10 +714,100 @@ const valueMap = computed(() => {
     return map;
 });
 
+const settingFieldKey = (schema: SchemaItem) => {
+    const separatorIndex = schema.key.indexOf(".");
+    return separatorIndex >= 0 ? schema.key.slice(separatorIndex + 1) : schema.key;
+};
+
+const displayLabel = (schema: SchemaItem) => {
+    const localized = settingCopyMap[schema.key];
+    if (localized) {
+        return localized[0];
+    }
+
+    const fieldLabel = settingFieldLabelMap[settingFieldKey(schema)];
+    if (fieldLabel) {
+        const section = sectionLabelMap[schema.section] ?? schema.section;
+        return `${section} · ${fieldLabel}`;
+    }
+    return schema.label;
+};
+
+const displayDescription = (schema: SchemaItem) => {
+    if (schema.key === "web_profile.allow_phone_bind" && !schema.active) {
+        return "当前部署未启用 Sms 功能，后端会拒绝发送验证码和绑定手机号；启用并配置可靠的短信服务后才能开放。";
+    }
+
+    if (schema.key === "meili.api_key") {
+        return schema.readonly || schema.apply_mode === "bootstrap_only"
+            ? "当前由 .env 的 PAOPAO_MEILI_MASTER_KEY 托管；修改后重新执行 manage.sh up，不能只在后台单边更换。"
+            : "保存新的 Meilisearch 主密钥后，需要重启应用才能生效，并确保搜索服务使用同一密钥。";
+    }
+
+    if (
+        schema.key === "local_oss.domain" ||
+        schema.key === "local_oss.secure"
+    ) {
+        return schema.readonly || schema.apply_mode === "bootstrap_only"
+            ? "托管部署由 .env 的 PAOPAO_PUBLIC_HOST / PAOPAO_PUBLIC_SECURE 统一控制；修改后重新执行对应模式的 manage.sh up。"
+            : schema.description;
+    }
+
+    const localized = settingCopyMap[schema.key];
+    if (localized) {
+        return localized[1];
+    }
+
+    const fieldLabel = settingFieldLabelMap[settingFieldKey(schema)];
+    if (fieldLabel) {
+        const section = sectionLabelMap[schema.section] ?? schema.section;
+        return `配置 ${section} 使用的${fieldLabel}。`;
+    }
+    return schema.description;
+};
+
+const normalizedSearchKeyword = computed(() =>
+    searchKeyword.value.trim().toLocaleLowerCase()
+);
+
+const matchesSearch = (schema: SchemaItem) => {
+    const keyword = normalizedSearchKeyword.value;
+    if (!keyword) {
+        return true;
+    }
+
+    const searchableText = [
+        displayLabel(schema),
+        displayDescription(schema),
+        schema.label,
+        schema.description,
+        schema.key,
+        groupLabelMap[schema.group],
+        sectionLabelMap[schema.section],
+    ]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase();
+    return searchableText.includes(keyword);
+};
+
 const activeDomains = computed(() => buildDomains(true));
 const inactiveDomains = computed(() => buildDomains(false));
 const inactiveItemCount = computed(() => {
     return inactiveDomains.value.reduce((count, domain) => count + domain.itemCount, 0);
+});
+const filteredItemCount = computed(() => {
+    const activeCount = activeDomains.value.reduce(
+        (count, domain) => count + domain.itemCount,
+        0
+    );
+    return activeCount + inactiveItemCount.value;
+});
+const filterResultText = computed(() => {
+    if (normalizedSearchKeyword.value) {
+        return `找到 ${filteredItemCount.value} 项（共 ${schemaItems.value.length} 项）`;
+    }
+    return `共 ${schemaItems.value.length} 项配置`;
 });
 
 const buildDomains = (active: boolean): GroupedDomain[] => {
@@ -404,7 +815,7 @@ const buildDomains = (active: boolean): GroupedDomain[] => {
     const domainMap: Record<string, GroupedDomain> = {};
 
     for (const schema of schemaItems.value) {
-        if (schema.active !== active) {
+        if (schema.active !== active || !matchesSearch(schema)) {
             continue;
         }
 
@@ -463,6 +874,15 @@ const sectionLabel = (section: string) => {
     return sectionLabelMap[section] ?? prettifyKey(section);
 };
 
+const runtimeText = (value?: string) => {
+    const text = value?.trim();
+    return text ? text : "未知";
+};
+
+const formatServerStart = (timestamp: number) => {
+    return timestamp > 0 ? formatTime(timestamp) : "未知";
+};
+
 const isEditable = (schema: SchemaItem) => {
     return schema.active && !schema.readonly && schema.apply_mode !== "bootstrap_only";
 };
@@ -471,8 +891,24 @@ const hasOptions = (schema: SchemaItem) => {
     return !!schema.options && schema.options.length > 0;
 };
 
-const settingOptions = (schema: SchemaItem) => {
-    return schema.options ?? [];
+const settingOptions = (
+    schema: SchemaItem
+): Array<{ label: string; value: string | number }> => {
+    return (schema.options ?? []).flatMap((option) => {
+        if (typeof option.value !== "string" && typeof option.value !== "number") {
+            return [];
+        }
+
+        return [
+            {
+                label:
+                    schema.key === "web_profile.default_tweet_visibility"
+                        ? visibilityLabelMap[String(option.value)] ?? option.label
+                        : option.label,
+                value: option.value,
+            },
+        ];
+    });
 };
 
 const sourceLabel = (source?: string) => {
@@ -543,6 +979,26 @@ const normalizeDraftValue = (
     }
 };
 
+const isDraftChanged = (schema: SchemaItem) => {
+    if (!isEditable(schema)) {
+        return false;
+    }
+    if (schema.secret) {
+        return (secretDraftValues[schema.key] ?? "").trim().length > 0;
+    }
+
+    const nextValue = normalizeDraftValue(schema, draftValues[schema.key]);
+    const initialValue = normalizeDraftValue(schema, initialDraftValues[schema.key]);
+    if (schema.type === "string") {
+        return String(nextValue ?? "").trim() !== String(initialValue ?? "").trim();
+    }
+    return nextValue !== initialValue;
+};
+
+const changedCount = computed(
+    () => schemaItems.value.filter((schema) => isDraftChanged(schema)).length
+);
+
 const extractDraftValue = (schema: SchemaItem): SettingPrimitive => {
     const current = valueMap.value[schema.key];
     if (schema.secret) {
@@ -595,6 +1051,9 @@ const formatValue = (value: unknown, schema?: SchemaItem) => {
         return `${value}`;
     }
     const text = String(value).trim();
+    if (schema?.key === "web_profile.default_tweet_visibility") {
+        return visibilityLabelMap[text] ?? text;
+    }
     return text.length > 0 ? text : "未设置";
 };
 
@@ -676,23 +1135,51 @@ const refreshPublicSiteProfile = async (updatedKeys: string[]) => {
         const profile = await getSiteProfile();
         storeProfile.updateSiteProfile(profile);
     } catch (_err) {
-        // do nothing
+        // The request layer displays the backend error. Keep the current draft
+        // intact so the administrator can correct it and retry.
     }
+};
+
+const readableLoadError = (error: unknown) => {
+    if (typeof error === "string" && error.trim()) {
+        return error.trim();
+    }
+    if (error && typeof error === "object") {
+        const detail = error as Record<string, unknown>;
+        if (
+            Array.isArray(detail.details) &&
+            typeof detail.details[0] === "string" &&
+            detail.details[0].trim()
+        ) {
+            return detail.details[0].trim();
+        }
+        if (typeof detail.msg === "string" && detail.msg.trim()) {
+            return detail.msg.trim();
+        }
+        if (typeof detail.message === "string" && detail.message.trim()) {
+            return detail.message.trim();
+        }
+    }
+    return "暂时无法读取运行状态或系统配置，请检查服务连接后重试。";
 };
 
 const loadSettings = async () => {
     loading.value = true;
+    loadError.value = "";
     try {
-        const [schemaResp, valuesResp] = await Promise.all([
+        const [siteResp, schemaResp, valuesResp] = await Promise.all([
+            Api.v1.admin.get.site.status(),
             Api.v1.admin.get.settings.schema(),
             Api.v1.admin.get.settings.values(),
         ]);
+        siteInfo.value = siteResp;
         schemaItems.value = schemaResp.items;
         valueItems.value = valuesResp.items;
-        hasPendingRestart.value = valuesResp.has_pending_restart;
+        hasPendingRestart.value =
+            valuesResp.has_pending_restart || siteResp.has_pending_restart;
         rebuildDraftState();
-    } catch (_err) {
-        // do nothing
+    } catch (error) {
+        loadError.value = readableLoadError(error);
     } finally {
         loading.value = false;
     }
@@ -759,7 +1246,7 @@ const collectChangedItems = (): Api.Admin.NetParams.SettingValueInput[] | null =
             (schema.type === "int" || schema.type === "float") &&
             (nextValue === null || Number.isNaN(nextValue))
         ) {
-            window.$message.warning(`${schema.label} 请输入有效数值`);
+            window.$message.warning(`${displayLabel(schema)} 请输入有效数值`);
             return null;
         }
 
@@ -796,6 +1283,24 @@ const numericDraftValue = (key: string): number | null => {
         return null;
     }
     return value;
+};
+
+const booleanDraftValue = (key: string): boolean => {
+    return draftValues[key] === true;
+};
+
+const selectDraftValue = (key: string): string | number | null => {
+    const value = draftValues[key];
+    return typeof value === "string" || typeof value === "number" ? value : null;
+};
+
+const stringDraftValue = (key: string): string => {
+    const value = draftValues[key];
+    return value === null || value === undefined ? "" : String(value);
+};
+
+const setDraftValue = (key: string, value: SettingPrimitive | undefined) => {
+    draftValues[key] = value ?? null;
 };
 
 const setNumericDraftIfPresent = (key: string, nextValue: number) => {
@@ -846,6 +1351,9 @@ const handleSave = async (e: MouseEvent) => {
         const resp = await Api.v1.admin.post.settings.save({ items });
         valueItems.value = resp.items;
         hasPendingRestart.value = resp.has_pending_restart;
+        if (siteInfo.value) {
+            siteInfo.value.has_pending_restart = resp.has_pending_restart;
+        }
         rebuildDraftState();
         await refreshPublicSiteProfile(resp.updated_keys);
         window.$message.success(`已保存 ${resp.updated_keys.length} 项配置`);
@@ -866,8 +1374,83 @@ onMounted(async () => {
 </script>
 
 <style lang="less" scoped>
-.setting-card {
+.load-error-alert,
+.overview-card {
     margin-top: -1px;
+    border-radius: 0;
+}
+
+.load-error-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.overview-card {
+    .overview-stats {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .overview-stat {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        min-width: 0;
+        padding: 12px;
+        border-radius: 10px;
+        background-color: rgba(127, 127, 127, 0.08);
+
+        .overview-stat-label {
+            font-size: 12px;
+            opacity: 0.68;
+        }
+
+        .overview-stat-value {
+            overflow: hidden;
+            font-size: 22px;
+            line-height: 1.2;
+            text-overflow: ellipsis;
+        }
+    }
+
+    .overview-details {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px 24px;
+        margin-top: 16px;
+    }
+
+    .overview-detail-item {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        min-width: 0;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(127, 127, 127, 0.12);
+
+        span {
+            flex: 0 0 auto;
+            font-size: 12px;
+            opacity: 0.65;
+        }
+
+        strong {
+            overflow-wrap: anywhere;
+            text-align: right;
+        }
+    }
+
+    .overview-detail-features {
+        grid-column: 1 / -1;
+    }
+}
+
+.setting-card {
+    margin-top: 10px;
     border-radius: 0;
 
     .settings-layout {
@@ -876,6 +1459,18 @@ onMounted(async () => {
 
     .setting-alert {
         margin-bottom: 0;
+    }
+
+    .settings-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+
+        .filter-result-text {
+            flex: 0 0 auto;
+            font-size: 12px;
+            opacity: 0.68;
+        }
     }
 
     .domain-block {
@@ -1029,12 +1624,58 @@ onMounted(async () => {
 }
 
 .dark {
-    .setting-card {
+    .setting-card,
+    .overview-card {
         background-color: rgba(16, 16, 20, 0.75);
     }
 
     .section-card {
         background-color: #18181c;
+    }
+}
+
+@media screen and (max-width: 600px) {
+    .load-error-content {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .overview-card {
+        .overview-stats {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .overview-details {
+            grid-template-columns: 1fr;
+        }
+
+        .overview-detail-features {
+            grid-column: auto;
+        }
+    }
+
+    .setting-card {
+        .settings-toolbar {
+            align-items: stretch;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .setting-item,
+        .inactive-item {
+            .setting-item-top,
+            .inactive-item-top {
+                flex-direction: column;
+            }
+
+            .setting-editor .number-input {
+                width: 100%;
+            }
+        }
+
+        .form-submit-wrap {
+            flex-wrap: wrap;
+        }
     }
 }
 </style>

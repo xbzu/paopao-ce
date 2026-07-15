@@ -1,0 +1,72 @@
+name: paopao-ce-simple
+
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${PAOPAO_VERSION:-local}
+        COMMIT: ${PAOPAO_COMMIT:-unknown}
+        BUILD_DATE: ${PAOPAO_BUILD_DATE:-unknown}
+    image: ${PAOPAO_IMAGE:-paopao-ce:local}
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    environment:
+      PAOPAO_CONFIG_FILE: /app/config.yaml
+      PAOPAO_JWT_SECRET: ${PAOPAO_JWT_SECRET:?Run ./manage.sh init first}
+      PAOPAO_ADMIN_SETTINGS_KEY: ${PAOPAO_ADMIN_SETTINGS_KEY:?Run ./manage.sh init first}
+      PAOPAO_MEILI_MASTER_KEY: ${PAOPAO_MEILI_MASTER_KEY:?Run ./manage.sh init first}
+      PAOPAO_PUBLIC_HOST: ${PAOPAO_PUBLIC_HOST:-localhost:8008}
+      PAOPAO_PUBLIC_SECURE: ${PAOPAO_PUBLIC_SECURE:-false}
+    ports:
+      - "${PAOPAO_BIND_ADDRESS:-127.0.0.1}:${PAOPAO_PORT:-8008}:8008"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - paopao-data:/app/custom
+    networks:
+      - internal
+
+  redis:
+    image: redis:${REDIS_TAG:-7.2-alpine}
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    volumes:
+      - redis-data:/data
+    networks:
+      - internal
+
+  meilisearch:
+    image: getmeili/meilisearch:${MEILI_TAG:-v1.49.0}
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: production
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_MASTER_KEY: ${PAOPAO_MEILI_MASTER_KEY:?Run ./manage.sh init first}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7700/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - meili-data:/meili_data
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  paopao-data:
+  redis-data:
+  meili-data:

@@ -137,8 +137,7 @@ import { storeToRefs } from 'pinia';
 import { Api } from '@/utils/request';
 import UserAction from '@/composables/useUserAction';
 
-const defaultavatar =
-  'https://paopao-demo.vercel.app/avatar/default/admin.png';
+const defaultavatar = '/logo.png';
 
 const router = useRouter();
 

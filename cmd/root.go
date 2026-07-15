@@ -29,6 +29,6 @@ func Register(cmd *cobra.Command) {
 }
 
 // Execute start application
-func Execute() {
-	rootCmd.Execute()
+func Execute() error {
+	return rootCmd.Execute()
 }

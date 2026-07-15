@@ -5,11 +5,16 @@
 package main
 
 import (
+	"os"
+
 	"github.com/rocboss/paopao-ce/cmd"
+	_ "github.com/rocboss/paopao-ce/cmd/admin"
 	_ "github.com/rocboss/paopao-ce/cmd/migrate"
 	_ "github.com/rocboss/paopao-ce/cmd/serve"
 )
 
 func main() {
-	cmd.Execute()
+	if err := cmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }

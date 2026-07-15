@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rocboss/paopao-ce/internal/conf"
 	"github.com/rocboss/paopao-ce/internal/servants"
+	"github.com/rocboss/paopao-ce/pkg/version"
 )
 
 type webService struct {
@@ -49,6 +50,17 @@ func newWebEngine() *gin.Engine {
 	corsConfig.AllowAllOrigins = true
 	corsConfig.AddAllowHeaders("Authorization")
 	e.Use(cors.New(corsConfig))
+
+	// A dependency-free liveness endpoint for container orchestration. It does
+	// not claim that external providers are healthy; the admin overview reports
+	// configured providers separately.
+	e.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "ok",
+			"service": "paopao-ce",
+			"version": version.ReadBuildInfo().Version,
+		})
+	})
 	// 使用Sentry hook
 	if conf.UseSentryGin() {
 		e.Use(sentrygin.New(sentrygin.Options{

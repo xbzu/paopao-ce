@@ -3,3 +3,4 @@
 *.css linguist-language=go
 *.vue linguist-language=go
 *.html linguist-language=go
+*.sh text eol=lf

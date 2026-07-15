@@ -1,0 +1,267 @@
+name: Deployment smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - '.gitattributes'
+      - 'docker-compose.yaml'
+      - 'deploy/**'
+      - 'manage.sh'
+      - '.env.example'
+      - 'config.yaml.sample'
+      - 'internal/conf/config.yaml'
+      - 'scripts/migration/**'
+      - '.github/workflows/deploy.yml'
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'web/**'
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - '.gitattributes'
+      - 'docker-compose.yaml'
+      - 'deploy/**'
+      - 'manage.sh'
+      - '.env.example'
+      - 'config.yaml.sample'
+      - 'internal/conf/config.yaml'
+      - 'scripts/migration/**'
+      - '.github/workflows/deploy.yml'
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'web/**'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  deployment-compose:
+    name: ${{ matrix.mode }} Compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [simple, standard]
+    env:
+      DEPLOYMENT_MODE: ${{ matrix.mode }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        run: |
+          cp .env.example .env
+          if ./manage.sh "$DEPLOYMENT_MODE" check; then
+            echo 'Placeholder deployment secrets were accepted.' >&2
+            exit 1
+          fi
+          rm .env
+          ./manage.sh "$DEPLOYMENT_MODE" check
+          test "$(stat -c '%a' .env)" = '600'
+          if [ "$DEPLOYMENT_MODE" = simple ]; then
+            direct_name=$(docker compose --env-file .env -f deploy/simple/compose.yaml config --format json | jq -r '.name')
+            root_name=$(docker compose --env-file .env -f docker-compose.yaml config --format json | jq -r '.name')
+            test "$direct_name" = 'paopao-ce-simple'
+            test "$root_name" = "$direct_name"
+          fi
+          cp .env /tmp/paopao-valid.env
+          sed -i 's/^PAOPAO_PUBLIC_SECURE=.*/PAOPAO_PUBLIC_SECURE=sometimes/' .env
+          if ./manage.sh "$DEPLOYMENT_MODE" check; then
+            echo 'Invalid PAOPAO_PUBLIC_SECURE was accepted.' >&2
+            exit 1
+          fi
+          mv /tmp/paopao-valid.env .env
+          cp config.yaml.sample config.yaml
+          printf '%s\n' 'VITE_HOST="http://10.10.100.113:8008"' > web/.env.local
+
+      - name: Build and start deployment
+        run: |
+          PAOPAO_JWT_SECRET=short \
+          PAOPAO_ADMIN_SETTINGS_KEY=short \
+          PAOPAO_MEILI_MASTER_KEY=short \
+          PAOPAO_MYSQL_PASSWORD=short \
+          PAOPAO_MYSQL_ROOT_PASSWORD=short \
+          PAOPAO_PUBLIC_HOST=attacker.invalid \
+          PAOPAO_PUBLIC_SECURE=sometimes \
+            ./manage.sh "$DEPLOYMENT_MODE" up
+
+          compose_cmd="docker compose --env-file .env -f deploy/$DEPLOYMENT_MODE/compose.yaml"
+          expected_jwt=$(awk -F= '$1 == "PAOPAO_JWT_SECRET" { print substr($0, index($0, "=") + 1) }' .env)
+          expected_admin=$(awk -F= '$1 == "PAOPAO_ADMIN_SETTINGS_KEY" { print substr($0, index($0, "=") + 1) }' .env)
+          expected_meili=$(awk -F= '$1 == "PAOPAO_MEILI_MASTER_KEY" { print substr($0, index($0, "=") + 1) }' .env)
+          test "$($compose_cmd exec -T app printenv PAOPAO_JWT_SECRET)" = "$expected_jwt"
+          test "$($compose_cmd exec -T app printenv PAOPAO_ADMIN_SETTINGS_KEY)" = "$expected_admin"
+          test "$($compose_cmd exec -T app printenv PAOPAO_MEILI_MASTER_KEY)" = "$expected_meili"
+          test "$($compose_cmd exec -T meilisearch printenv MEILI_MASTER_KEY)" = "$expected_meili"
+          test "$($compose_cmd exec -T app printenv PAOPAO_PUBLIC_HOST)" = 'localhost:8008'
+          test "$($compose_cmd exec -T app printenv PAOPAO_PUBLIC_SECURE)" = 'false'
+          if [ "$DEPLOYMENT_MODE" = standard ]; then
+            expected_mysql=$(awk -F= '$1 == "PAOPAO_MYSQL_PASSWORD" { print substr($0, index($0, "=") + 1) }' .env)
+            expected_root=$(awk -F= '$1 == "PAOPAO_MYSQL_ROOT_PASSWORD" { print substr($0, index($0, "=") + 1) }' .env)
+            test "$($compose_cmd exec -T app printenv PAOPAO_MYSQL_PASSWORD)" = "$expected_mysql"
+            test "$($compose_cmd exec -T mysql printenv MYSQL_ROOT_PASSWORD)" = "$expected_root"
+          fi
+
+          cp .env /tmp/paopao-before-restart.env
+          sed -i 's/^PAOPAO_JWT_SECRET=.*/PAOPAO_JWT_SECRET=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/' .env
+          ./manage.sh "$DEPLOYMENT_MODE" restart
+          test "$($compose_cmd exec -T app printenv PAOPAO_JWT_SECRET)" = "$expected_jwt"
+          mv /tmp/paopao-before-restart.env .env
+
+      - name: Verify public endpoints
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:8008/healthz | jq -e '.status == "ok"'
+          curl --fail --silent --show-error http://127.0.0.1:8008/v1/site/version | jq -e '.code == 0'
+          curl --fail --silent --show-error http://127.0.0.1:8008/v1/site/profile | jq -e '.code == 0'
+
+      - name: Verify embedded web frontend
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:8008/ > /tmp/paopao-index.html
+          grep -q '<div id="app"></div>' /tmp/paopao-index.html
+          : > /tmp/paopao-assets.js
+          grep -oE '/assets/[^" ]+\.js' /tmp/paopao-index.html | sort -u | while read -r asset; do
+            curl --fail --silent --show-error "http://127.0.0.1:8008$asset" >> /tmp/paopao-assets.js
+          done
+          if grep -q '10\.10\.100\.113' /tmp/paopao-assets.js; then
+            echo 'Embedded frontend contains a private development API address.' >&2
+            exit 1
+          fi
+          google-chrome --headless=new --no-sandbox --disable-gpu \
+            --virtual-time-budget=5000 --dump-dom http://127.0.0.1:8008/ > /tmp/paopao-dom.html
+          grep -q 'data-v-app' /tmp/paopao-dom.html
+
+      - name: Bootstrap and verify administrator access
+        run: |
+          curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"ciowner","password":"ci-pass-123"}' \
+            http://127.0.0.1:8008/v1/auth/register | jq -e '.code == 0'
+          member_token=$(curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"ciowner","password":"ci-pass-123"}' \
+            http://127.0.0.1:8008/v1/auth/login | jq -er '.data.token')
+          curl --silent --show-error \
+            -H "Authorization: Bearer $member_token" \
+            http://127.0.0.1:8008/v1/admin/settings/schema \
+            | jq -e '.code == 20022'
+          if ./manage.sh "$DEPLOYMENT_MODE" promote-admin userdoesnotexist; then
+            echo 'Missing administrator candidate returned success.' >&2
+            exit 1
+          fi
+          ./manage.sh "$DEPLOYMENT_MODE" promote-admin ciowner
+          token=$(curl --fail --silent --show-error \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"ciowner","password":"ci-pass-123"}' \
+            http://127.0.0.1:8008/v1/auth/login | jq -er '.data.token')
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $token" \
+            http://127.0.0.1:8008/v1/admin/settings/schema \
+            | jq -e '
+                .code == 0
+                and (.data.items | length > 0)
+                and ([.data.items[] | select(.key == "web_profile.allow_phone_bind" and .active == false)] | length == 1)
+                and ([.data.items[] | select((.key == "local_oss.domain" or .key == "local_oss.secure") and .readonly == true and .apply_mode == "bootstrap_only")] | length == 2)
+                and ([.data.items[] | select(.key == "meili.api_key" and .secret == true and .readonly == true and .apply_mode == "bootstrap_only" and .bootstrap_configured == true and (has("bootstrap_value") | not))] | length == 1)'
+          curl --silent --show-error \
+            -H "Authorization: Bearer $token" \
+            -H 'Content-Type: application/json' \
+            -d '{"items":[{"key":"web_profile.allow_phone_bind","value":true}]}' \
+            http://127.0.0.1:8008/v1/admin/settings/save \
+            | jq -e '.code == 10001 and (.details[0] | contains("setting feature is not active"))'
+          settings_values=$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer $token" \
+            http://127.0.0.1:8008/v1/admin/settings/values)
+          printf '%s' "$settings_values" \
+            | jq -e '.data.items[] | select(.key == "meili.api_key") | .configured == true and (has("value") | not) and (has("effective_value") | not)'
+          expected_meili=$(awk -F= '$1 == "PAOPAO_MEILI_MASTER_KEY" { print substr($0, index($0, "=") + 1) }' .env)
+          if grep -Fq "$expected_meili" <<<"$settings_values"; then
+            echo 'Administrator settings response exposed the Meilisearch master key.' >&2
+            exit 1
+          fi
+          original=$(printf '%s' "$settings_values" | jq -r '.data.items[] | select(.key == "web_profile.allow_user_register") | .value')
+          case "$original" in true|false) ;; *) echo 'registration setting is missing' >&2; exit 1 ;; esac
+          target=false
+          jq -n --argjson target "$target" \
+            '{items: [{key: "web_profile.allow_user_register", value: $target}]}' \
+            | curl --fail --silent --show-error \
+                -H "Authorization: Bearer $token" \
+                -H 'Content-Type: application/json' \
+                --data-binary @- \
+                http://127.0.0.1:8008/v1/admin/settings/save \
+            | jq -e '.code == 0 and (.data.updated_keys | index("web_profile.allow_user_register")) != null'
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $token" \
+            http://127.0.0.1:8008/v1/admin/settings/values \
+            | jq -e --argjson target "$target" \
+                '.data.items[] | select(.key == "web_profile.allow_user_register") | .value == $target'
+          curl --silent --show-error \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"ciblocked","password":"ci-pass-123"}' \
+            http://127.0.0.1:8008/v1/auth/register \
+            | jq -e '.code == 20023'
+          jq -n --argjson original "$original" \
+            '{items: [{key: "web_profile.allow_user_register", value: $original}]}' \
+            | curl --fail --silent --show-error \
+                -H "Authorization: Bearer $token" \
+                -H 'Content-Type: application/json' \
+                --data-binary @- \
+                http://127.0.0.1:8008/v1/admin/settings/save \
+            | jq -e '.code == 0'
+
+          restart_target="Cloud restart verified: $DEPLOYMENT_MODE"
+          jq -n --arg target "$restart_target" \
+            '{items: [{key: "web_profile.copyright_top", value: $target}]}' \
+            | curl --fail --silent --show-error \
+                -H "Authorization: Bearer $token" \
+                -H 'Content-Type: application/json' \
+                --data-binary @- \
+                http://127.0.0.1:8008/v1/admin/settings/save \
+            | jq -e '
+                .code == 0
+                and .data.has_pending_restart == true
+                and ([.data.items[] | select(.key == "web_profile.copyright_top" and .pending_restart == true)] | length == 1)'
+          ./manage.sh "$DEPLOYMENT_MODE" restart
+          curl --fail --silent --show-error http://127.0.0.1:8008/healthz | jq -e '.status == "ok"'
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $token" \
+            http://127.0.0.1:8008/v1/admin/settings/values \
+            | jq -e --arg target "$restart_target" '
+                .data as $data
+                | ($data.has_pending_restart == false)
+                  and ([
+                    $data.items[]
+                    | select(
+                        .key == "web_profile.copyright_top"
+                        and .value == $target
+                        and .effective_value == $target
+                        and .pending_restart == false
+                      )
+                  ] | length == 1)'
+
+      - name: Capture deployment logs
+        if: failure()
+        run: docker compose --env-file .env -f "deploy/$DEPLOYMENT_MODE/compose.yaml" logs --no-color > deployment-smoke.log
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-smoke-logs-${{ matrix.mode }}
+          path: deployment-smoke.log
+
+      - name: Stop deployment
+        if: always()
+        run: ./manage.sh "$DEPLOYMENT_MODE" down || true

@@ -8,11 +8,13 @@ endif
 TARGET_BIN = $(basename $(TARGET))
 
 ifeq (n$(CGO_ENABLED),n)
-CGO_ENABLED := 1
+CGO_ENABLED := 0
 endif
 
+YARN ?= corepack yarn
+
 RELEASE_ROOT = release
-RELEASE_FILES = LICENSE README.md CHANGELOG.md config.yaml.sample docker-compose.yaml scripts docs
+RELEASE_FILES = LICENSE README.md README_ZH.md INSTALL.md INSTALL_ZH.md CHANGELOG.md ROADMAP.md features-status.md config.yaml.sample scripts docs
 RELEASE_LINUX_AMD64 = $(RELEASE_ROOT)/linux-amd64/$(PROJECT)
 RELEASE_DARWIN_AMD64 = $(RELEASE_ROOT)/darwin-amd64/$(PROJECT)
 RELEASE_DARWIN_ARM64 = $(RELEASE_ROOT)/darwin-arm64/$(PROJECT)
@@ -24,28 +26,31 @@ SHA_SHORT := $(shell git rev-parse --short HEAD)
 
 GOFMT ?= gofumpt -l -w
 MOD_NAME = github.com/rocboss/paopao-ce
+BUILD_TAGS = migration $(TAGS)
 LDFLAGS = -X "${MOD_NAME}/pkg/version.version=${BUILD_VERSION}" \
           -X "${MOD_NAME}/pkg/version.buildDate=${BUILD_DATE}" \
           -X "${MOD_NAME}/pkg/version.commitID=${SHA_SHORT}" \
-          -X "${MOD_NAME}/pkg/version.buildTags=${TAGS}" \
+          -X "${MOD_NAME}/pkg/version.buildTags=${BUILD_TAGS}" \
 		  -w -s
 
 all: fmt build
 
-build:
+build: build-web
 	@echo Build paopao-ce
-	@go build -pgo=auto -trimpath -tags '$(TAGS)' -ldflags '$(LDFLAGS)' -o $(RELEASE_ROOT)/$(TARGET)
+	@mkdir -p $(RELEASE_ROOT)
+	@CGO_ENABLED=$(CGO_ENABLED) go build -pgo=auto -trimpath -tags '$(BUILD_TAGS)' -ldflags '$(LDFLAGS)' -o $(RELEASE_ROOT)/$(TARGET)
 
-buildx:
+buildx: build-web
 	@go mod download
 	@echo Build paopao-ce
-	@go build -pgo=auto -trimpath -tags '$(TAGS)' -ldflags '$(LDFLAGS)' -o $(RELEASE_ROOT)/$(TARGET)
+	@mkdir -p $(RELEASE_ROOT)
+	@CGO_ENABLED=$(CGO_ENABLED) go build -pgo=auto -trimpath -tags '$(BUILD_TAGS)' -ldflags '$(LDFLAGS)' -o $(RELEASE_ROOT)/$(TARGET)
 
 build-web:
-	@cd web && rm -rf dist/* && yarn build && cd -
+	@cd web && rm -rf dist/* && VITE_HOST= $(YARN) build && cd -
 
-run:
-	@go run -pgo=auto -trimpath -gcflags "all=-N -l" -tags '$(TAGS)' -ldflags '$(LDFLAGS)' . serve
+run: build-web
+	@CGO_ENABLED=$(CGO_ENABLED) go run -pgo=auto -trimpath -gcflags "all=-N -l" -tags '$(BUILD_TAGS)' -ldflags '$(LDFLAGS)' . serve
 
 .PHONY: release
 release: linux-amd64 darwin-amd64 darwin-arm64 windows-x64
@@ -60,24 +65,28 @@ release: linux-amd64 darwin-amd64 darwin-arm64 windows-x64
 	@cd $(RELEASE_WINDOWS_AMD64)/.. && rm -f *.zip && zip -r $(PROJECT)-windows_amd64.zip $(PROJECT) && cd -
 
 .PHONY: linux-amd64
-linux-amd64:
+linux-amd64: build-web
 	@echo Build paopao-ce [linux-amd64] CGO_ENABLED=$(CGO_ENABLED) TAGS="'$(TAGS)'"
-	@CGO_ENABLED=$(CGO_ENABLED) GOOS=linux GOARCH=amd64 go build -pgo=auto -trimpath -tags '$(TAGS)' -ldflags '$(LDFLAGS)' -o $(RELEASE_LINUX_AMD64)/$(TARGET_BIN)
+	@mkdir -p $(RELEASE_LINUX_AMD64)
+	@CGO_ENABLED=$(CGO_ENABLED) GOOS=linux GOARCH=amd64 go build -pgo=auto -trimpath -tags '$(BUILD_TAGS)' -ldflags '$(LDFLAGS)' -o $(RELEASE_LINUX_AMD64)/$(TARGET_BIN)
 
 .PHONY: darwin-amd64
-darwin-amd64:
+darwin-amd64: build-web
 	@echo Build paopao-ce [darwin-amd64] CGO_ENABLED=$(CGO_ENABLED) TAGS="'$(TAGS)'"
-	@CGO_ENABLED=$(CGO_ENABLED) GOOS=darwin GOARCH=amd64 go build -pgo=auto -trimpath  -tags '$(TAGS)' -ldflags '$(LDFLAGS)' -o $(RELEASE_DARWIN_AMD64)/$(TARGET_BIN)
+	@mkdir -p $(RELEASE_DARWIN_AMD64)
+	@CGO_ENABLED=$(CGO_ENABLED) GOOS=darwin GOARCH=amd64 go build -pgo=auto -trimpath  -tags '$(BUILD_TAGS)' -ldflags '$(LDFLAGS)' -o $(RELEASE_DARWIN_AMD64)/$(TARGET_BIN)
 
 .PHONY: darwin-arm64
-darwin-arm64:
+darwin-arm64: build-web
 	@echo Build paopao-ce [darwin-arm64] CGO_ENABLED=$(CGO_ENABLED) TAGS="'$(TAGS)'"
-	@CGO_ENABLED=$(CGO_ENABLED) GOOS=darwin GOARCH=arm64 go build -pgo=auto -trimpath -tags '$(TAGS)' -ldflags '$(LDFLAGS)' -o $(RELEASE_DARWIN_ARM64)/$(TARGET_BIN)
+	@mkdir -p $(RELEASE_DARWIN_ARM64)
+	@CGO_ENABLED=$(CGO_ENABLED) GOOS=darwin GOARCH=arm64 go build -pgo=auto -trimpath -tags '$(BUILD_TAGS)' -ldflags '$(LDFLAGS)' -o $(RELEASE_DARWIN_ARM64)/$(TARGET_BIN)
 
 .PHONY: windows-x64
-windows-x64:
+windows-x64: build-web
 	@echo Build paopao-ce [windows-x64] CGO_ENABLED=$(CGO_ENABLED) TAGS="'$(TAGS)'"
-	@CGO_ENABLED=$(CGO_ENABLED) GOOS=windows GOARCH=amd64 go build -pgo=auto -trimpath  -tags '$(TAGS)' -ldflags '$(LDFLAGS)' -o $(RELEASE_WINDOWS_AMD64)/$(TARGET_BIN).exe
+	@mkdir -p $(RELEASE_WINDOWS_AMD64)
+	@CGO_ENABLED=$(CGO_ENABLED) GOOS=windows GOARCH=amd64 go build -pgo=auto -trimpath  -tags '$(BUILD_TAGS)' -ldflags '$(LDFLAGS)' -o $(RELEASE_WINDOWS_AMD64)/$(TARGET_BIN).exe
 
 .PHONY: generate
 generate: gen-mir gen-rpc gen-enum
@@ -108,7 +117,7 @@ proto-lint:
 
 clean:
 	@go clean
-	@find ./release -type f -exec rm -r {} +
+	@rm -rf $(RELEASE_ROOT)
 
 fmt:
 	@echo Formatting...

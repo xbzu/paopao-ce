@@ -1,0 +1,79 @@
+name: Source build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Makefile'
+      - '.gitattributes'
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'config.yaml.sample'
+      - 'internal/conf/config.yaml'
+      - 'scripts/migration/**'
+      - 'web/**'
+      - '.github/workflows/source-build.yml'
+  pull_request:
+    paths:
+      - 'Makefile'
+      - '.gitattributes'
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'config.yaml.sample'
+      - 'internal/conf/config.yaml'
+      - 'scripts/migration/**'
+      - 'web/**'
+      - '.github/workflows/source-build.yml'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Linux source build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache: true
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: web/yarn.lock
+      - name: Enable Yarn
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+      - name: Install Web dependencies
+        working-directory: web
+        run: yarn install --frozen-lockfile
+      - name: Add a hostile ignored development override
+        run: printf '%s\n' 'VITE_HOST="http://10.10.100.113:8008"' > web/.env.local
+      - name: Build embedded application
+        run: make build
+      - name: Verify build artifact
+        run: |
+          test -x release/paopao
+          if release/paopao definitely-not-a-command; then
+            echo 'Unknown CLI command returned success.' >&2
+            exit 1
+          fi
+          if grep -R -a -E -q '10\.10\.100\.113|paopao-assets\.oss-cn-shanghai\.aliyuncs\.com' web/dist release/paopao; then
+            echo 'Source build contains a private development API address or legacy runtime asset.' >&2
+            exit 1
+          fi

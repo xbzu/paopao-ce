@@ -16,6 +16,8 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'config.yaml.sample'
+      - 'internal/conf/config.yaml'
+      - 'scripts/migration/**'
       - '.golangci.yml'
       - '.github/workflows/go.yml'
   pull_request:
@@ -24,6 +26,8 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'config.yaml.sample'
+      - 'internal/conf/config.yaml'
+      - 'scripts/migration/**'
       - '.golangci.yml'
       - '.github/workflows/go.yml'
 env:

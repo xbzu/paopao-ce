@@ -1,70 +1,33 @@
-## Roadmap for paopao-ce
-[paopao-ce](https://github.com/rocboss/paopao-ce/tree/dev)/[paopao-ce-plus](https://github.com/rocboss/paopao-ce/tree/r/paopao-ce-plus)/[paopao-ce-pro](https://github.com/rocboss/paopao-ce/tree/r/paopao-ce-pro) features develop or optimize and bug fix  roadmap.
+# PaoPao CE roadmap
 
-## paopao-ce roadmap
-#### dev+
-* [ ] add `Auth:Bcrypt` feature
-* [ ] add `Auth:MD5` feature (just for compatible)
-* [ ] optimize media tweet submit logic
-* [ ] optimize search logic service
-* [ ] optimize backend data logic service(optimize database CRUD operate)
-* [ ] optimize current message push logic service use `ims` module 
-* [ ] add `NativeOBS` feature
+This roadmap describes the independently maintained `xbzu/paopao-ce` line.
+Historical upstream plans are preserved in the original repository history.
 
-#### v0.4.0
-* [x] add `Followship` feature.
-* [x] add extend base ORM code for implement data logic base sqlx/sqlc.
-* [x] user/profile page add comment/highlight/media/likes sub-page.
-* [x] add tweet highlight feature to enable user set a tweet as highlight.
-* [x] new execute file base sub-command style.
-* [x] add extend base ORM code for implement data logic base sqlx/sqlc
+## Phase 1: operable baseline
 
-#### v0.3.0
-* [x] remove `Deprecated:OldWeb` feature
-* [x] add user topic follow feature support
-* [x] add tweet link share support
-* [x] add comment thumbsUp/thumbsDown support
-* [x] add `RedisCacheIndex` feature
-* [x] add `Sentry` feature
+- [x] Provide one management entrypoint for initialization, lifecycle, logs, and administrator promotion.
+- [x] Offer separate Simple (SQLite) and Standard (MySQL) Compose modes.
+- [x] Generate deployment secrets, bind to localhost by default, and run migrations automatically.
+- [x] Add an administrator settings workspace with runtime overview, search, validation, and restart status.
+- [x] Keep only atomically enforced registration and phone gates live; mark other mutable settings restart-required.
+- [x] Test both deployment modes in GitHub Actions without publishing a production instance.
 
-#### v0.2.0
-* [x] add `Friendship` feature
-* [x] add `Lightship` feature
-* [x] add `Pyroscope` feature
-* [x] add new `Web` service
-* [x] add `Frontend:Web` feature
-* [x] add `Deprecated:OldWeb` feature
-* [x] support run multiple service in single paopao-ce instance
-* [x] use [go-mir](https://github.com/alimy/mir) optimize paopao-ce source code architecture
+## Phase 2: administration and safety
 
-#### Next
-* [ ] add `Bleve` feature
-* [ ] add `SpaceX` feature
-* [ ] add `Bot` feature
-* [ ] add `Admin` feature
-* [ ] add `Mobile` gRPC API service feature
-* [ ] add admin web frontend
-* [ ] add tweet forwarding support
-* [ ] add tweet resource access control base on simple RBAC support
-* [ ] add user's `Activation Code` feature support
-* [ ] add user block feature support
-* [ ] add i18n support
-* [ ] add reactions support
-* [ ] add tweet thread like twitter support
-* [ ] add short link support
-* [ ] optimize topics service
+- [ ] Promote selected restart-required settings to atomic runtime snapshots where immediate updates add real value.
+- [ ] Add administrator user, content, report, and moderation workflows.
+- [ ] Add configuration audit history, rollback, and permission scopes.
+- [ ] Add coordinated secret rotation for MySQL, Meilisearch, JWT, and encrypted administrator settings.
+- [ ] Add backup, restore, and guided Simple-to-Standard data migration commands.
+- [ ] Add structured upgrade checks and release notes.
 
-## paopao-ce-plus roadmap
-#### paopao-ce-plus/v0.5.0
-* [x] adapt for paopao-ce v0.5.0
+## Phase 3: product evolution
 
-#### paopao-ce-plus/v0.4.0
-* [x] adapt for paopao-ce v0.4.0
+- [ ] Improve onboarding, mobile layouts, accessibility, and localization.
+- [ ] Add observability presets and operator dashboards.
+- [ ] Expand abuse prevention, rate limiting, and account security controls.
+- [ ] Evaluate modular integrations only after their operational and security boundaries are tested.
 
-## paopao-ce-pro roadmap
-#### paopao-ce-pro/v0.5.0
-* [ ] adapt for paopao-ce v0.4.0
-
-#### paopao-ce-pro/v0.4.0
-* [ ] adapt for paopao-ce v0.4.0
-
+Changes land on `main` through focused pull requests. A checked roadmap item means
+the code and repository automation exist; it does not mean a production deployment
+has been performed.

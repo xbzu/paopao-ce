@@ -10,11 +10,14 @@ import (
 	"github.com/rocboss/paopao-ce/internal/infra/migration"
 )
 
-func Initial() {
+func Initial() error {
 	// migrate database if needed
-	migration.Run()
+	if err := migration.Run(); err != nil {
+		return err
+	}
 	// event manager system initialize
 	events.Initial()
 	// metric manager system initialize
 	metrics.Initial()
+	return nil
 }

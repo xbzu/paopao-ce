@@ -36,5 +36,7 @@ jobs:
           corepack prepare yarn@1.22.22 --activate
       - name: Install dependencies
         run: yarn install --frozen-lockfile
+      - name: Type-check web app
+        run: yarn typecheck
       - name: Build web app
         run: yarn build
