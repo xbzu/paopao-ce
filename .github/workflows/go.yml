@@ -1,5 +1,6 @@
 name: Go
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -13,12 +14,16 @@ on:
     paths:
       - '**.go'
       - 'go.mod'
+      - 'go.sum'
+      - 'config.yaml.sample'
       - '.golangci.yml'
       - '.github/workflows/go.yml'
   pull_request:
     paths:
       - '**.go'
       - 'go.mod'
+      - 'go.sum'
+      - 'config.yaml.sample'
       - '.golangci.yml'
       - '.github/workflows/go.yml'
 env:
@@ -51,12 +56,13 @@ jobs:
         platform: [ ubuntu-latest, macos-latest ]
     runs-on: ${{ matrix.platform }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
       - name: Install Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
-      - name: Checkout code
-        uses: actions/checkout@v3
+          cache: true
       - name: Setup config file
         run: cp config.yaml.sample config.yaml
       - name: Run tests
@@ -72,12 +78,13 @@ jobs:
         platform: [ windows-latest ]
     runs-on: ${{ matrix.platform }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
       - name: Install Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
-      - name: Checkout code
-        uses: actions/checkout@v3
+          cache: true
       - name: Setup config file
         run: copy config.yaml.sample config.yaml
       - name: Run tests
