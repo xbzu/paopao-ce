@@ -11,39 +11,70 @@ CREATE TABLE `p_site_settings` (
 	PRIMARY KEY (`key`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Admin settings overrides';
 
+-- Keep these as separate statements: legacy text columns can use a different
+-- collation from connection literals, which makes a UNION fail on MySQL 8.
 INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
-SELECT `key`, `value`, 0, created_on, modified_on, 0, 0 FROM (
-	SELECT 'web_profile.use_friendship' AS `key`, IF(use_friendship <> 0, 'true', 'false') AS `value`, created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.enable_trends_bar', IF(enable_trends_bar <> 0, 'true', 'false'), created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.enable_wallet', IF(enable_wallet <> 0, 'true', 'false'), created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.allow_tweet_attachment', IF(allow_tweet_attachment <> 0, 'true', 'false'), created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.allow_tweet_attachment_price', IF(allow_tweet_attachment_price <> 0, 'true', 'false'), created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.allow_tweet_video', IF(allow_tweet_video <> 0, 'true', 'false'), created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.default_tweet_max_length', CAST(default_tweet_max_length AS CHAR), created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.tweet_web_ellipsis_size', CAST(tweet_web_ellipsis_size AS CHAR), created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.tweet_mobile_ellipsis_size', CAST(tweet_mobile_ellipsis_size AS CHAR), created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.default_tweet_visibility', default_tweet_visibility, created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.default_msg_loop_interval', CAST(default_msg_loop_interval AS CHAR), created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.copyright_top', copyright_top, created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.copyright_left', copyright_left, created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.copyright_left_link', copyright_left_link, created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.copyright_right', copyright_right, created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-	UNION ALL
-	SELECT 'web_profile.copyright_right_link', copyright_right_link, created_on, modified_on FROM `p_site_settings_legacy` WHERE id = 1
-) AS legacy_rows;
+SELECT 'web_profile.use_friendship', IF(use_friendship <> 0, 'true', 'false'), 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.enable_trends_bar', IF(enable_trends_bar <> 0, 'true', 'false'), 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.enable_wallet', IF(enable_wallet <> 0, 'true', 'false'), 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.allow_tweet_attachment', IF(allow_tweet_attachment <> 0, 'true', 'false'), 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.allow_tweet_attachment_price', IF(allow_tweet_attachment_price <> 0, 'true', 'false'), 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.allow_tweet_video', IF(allow_tweet_video <> 0, 'true', 'false'), 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.default_tweet_max_length', CAST(default_tweet_max_length AS CHAR), 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.tweet_web_ellipsis_size', CAST(tweet_web_ellipsis_size AS CHAR), 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.tweet_mobile_ellipsis_size', CAST(tweet_mobile_ellipsis_size AS CHAR), 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.default_tweet_visibility', default_tweet_visibility, 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.default_msg_loop_interval', CAST(default_msg_loop_interval AS CHAR), 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.copyright_top', copyright_top, 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.copyright_left', copyright_left, 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.copyright_left_link', copyright_left_link, 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.copyright_right', copyright_right, 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
+
+INSERT INTO `p_site_settings` (`key`, `value`, `is_encrypted`, `created_on`, `modified_on`, `deleted_on`, `is_del`)
+SELECT 'web_profile.copyright_right_link', copyright_right_link, 0, created_on, modified_on, 0, 0
+FROM `p_site_settings_legacy` WHERE id = 1;
 
 DROP TABLE `p_site_settings_legacy`;
