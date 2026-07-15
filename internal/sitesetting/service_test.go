@@ -2,6 +2,8 @@ package sitesetting
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,10 +13,54 @@ import (
 	"github.com/alimy/tryst/cfg"
 	"github.com/rocboss/paopao-ce/internal/conf"
 	"github.com/rocboss/paopao-ce/internal/model/web"
+	"gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 )
+
+var errUnexpectedDryRunQuery = errors.New("unexpected database call during dry run")
+
+type dryRunConnPool struct{}
+
+func (dryRunConnPool) PrepareContext(context.Context, string) (*sql.Stmt, error) {
+	return nil, errUnexpectedDryRunQuery
+}
+
+func (dryRunConnPool) ExecContext(context.Context, string, ...any) (sql.Result, error) {
+	return nil, errUnexpectedDryRunQuery
+}
+
+func (dryRunConnPool) QueryContext(context.Context, string, ...any) (*sql.Rows, error) {
+	return nil, errUnexpectedDryRunQuery
+}
+
+func (dryRunConnPool) QueryRowContext(context.Context, string, ...any) *sql.Row {
+	return &sql.Row{}
+}
+
+func TestDeleteOverrideQuotesReservedKeyForMySQL(t *testing.T) {
+	db, err := gorm.Open(mysql.New(mysql.Config{
+		Conn:                      dryRunConnPool{},
+		SkipInitializeWithVersion: true,
+	}), &gorm.Config{
+		DisableAutomaticPing:   true,
+		DryRun:                 true,
+		SkipDefaultTransaction: true,
+	})
+	if err != nil {
+		t.Fatalf("open dry-run MySQL database: %v", err)
+	}
+
+	result := deleteOverrideByKey(db, "web_profile.allow_user_register")
+	if result.Error != nil {
+		t.Fatalf("build dry-run delete: %v", result.Error)
+	}
+	stmt := result.Statement
+	if got := stmt.SQL.String(); !strings.Contains(got, ".`key` = ?") {
+		t.Fatalf("delete SQL = %q, want quoted key column", got)
+	}
+}
 
 func TestGetProfileUsesBootstrapDefaultsWhenNoOverride(t *testing.T) {
 	svc := newTestService(t)

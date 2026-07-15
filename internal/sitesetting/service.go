@@ -373,7 +373,7 @@ func (s *Service) persistPrepared(ctx context.Context, prepared []preparedValue)
 		for _, item := range prepared {
 			serialized := serializeValue(item.Definition, item.Value)
 			if valuesEqual(item.BootstrapDefault(), item.Value) {
-				if err := tx.Where("key = ?", item.Key).Delete(&settingRecord{}).Error; err != nil {
+				if err := deleteOverrideByKey(tx, item.Key).Error; err != nil {
 					return err
 				}
 				continue
@@ -395,6 +395,11 @@ func (s *Service) persistPrepared(ctx context.Context, prepared []preparedValue)
 		}
 		return nil
 	})
+}
+
+func deleteOverrideByKey(tx *gorm.DB, key string) *gorm.DB {
+	// A map condition lets GORM quote the reserved MySQL column name `key`.
+	return tx.Where(map[string]any{"key": key}).Delete(&settingRecord{})
 }
 
 func (s *Service) buildValueItems(records map[string]settingRecord) ([]web.AdminSettingValue, bool) {
